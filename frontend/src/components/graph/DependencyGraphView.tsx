@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { 
   ReactFlow, 
+  ReactFlowProvider,
   Background, 
   MiniMap, 
   useNodesState, 
@@ -295,8 +296,10 @@ const FlowWrapper: React.FC = () => {
 
 export const DependencyGraphView: React.FC = () => {
   return (
-    <div style={{ height: '100%', width: '100%', backgroundColor: 'var(--bg-app)', position: 'relative' }}>
-      <FlowWrapper />
+    <div id="architecture-graph-container" style={{ height: '100%', width: '100%', backgroundColor: 'var(--bg-app)', position: 'relative' }}>
+      <ReactFlowProvider>
+        <FlowWrapper />
+      </ReactFlowProvider>
     </div>
   );
 };

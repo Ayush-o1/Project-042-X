@@ -142,7 +142,20 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       const filesRes = await fetch(`${import.meta.env.VITE_API_URL}/repository/files`, { signal });
       const filesData = await filesRes.json();
       if (filesData.success) {
-        set({ files: filesData.data });
+        // Normalize: backend FileModel uses sizeBytes, has no isDirectory/lastModified.
+        // Frontend FileModel expects size, isDirectory, lastModified.
+        const normalizedFiles = (filesData.data as any[]).map((f) => ({
+          name: f.name,
+          path: f.path,
+          relativePath: f.relativePath,
+          extension: f.extension,
+          language: f.language,
+          size: f.sizeBytes ?? 0,
+          sizeBytes: f.sizeBytes ?? 0,
+          isDirectory: false,      // backend only returns files, never directories
+          lastModified: 0,         // not tracked by backend
+        }));
+        set({ files: normalizedFiles });
       }
       set({ analysisProgress: 60, isFetchingFiles: false, isFetchingDependencies: true });
 
@@ -150,7 +163,27 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       const depRes = await fetch(`${import.meta.env.VITE_API_URL}/repository/dependencies`, { signal });
       const depData = await depRes.json();
       if (depData.success) {
-        set({ dependencies: depData.data });
+        // Normalize: backend GraphNode shape is {id, fileMetadata:{path,name,language,...}, hasSyntaxError}
+        // Frontend DependencyGraphData.GraphNode expects {id, path, name, type}
+        const normalizedDeps = {
+          nodes: (depData.data.nodes as any[]).map((n) => ({
+            id: n.id,
+            path: n.fileMetadata?.path ?? n.id,
+            name: n.fileMetadata?.name ?? n.id.split('/').pop() ?? n.id,
+            type: n.fileMetadata?.language ?? 'Unknown',
+            hasSyntaxError: n.hasSyntaxError ?? false,
+          })),
+          // Normalize: backend GraphEdge shape is {sourceId, targetId, isDynamic, isTypeOnly}
+          // Frontend DependencyGraphData.GraphEdge expects {sourceId, targetId, type}
+          edges: (depData.data.edges as any[]).map((e) => ({
+            sourceId: e.sourceId,
+            targetId: e.targetId,
+            type: e.isDynamic ? 'dynamic' : 'static',
+            isDynamic: e.isDynamic,
+            isTypeOnly: e.isTypeOnly,
+          })),
+        };
+        set({ dependencies: normalizedDeps });
       }
       set({ analysisProgress: 85, isFetchingDependencies: false, isFetchingGit: true });
 
@@ -158,14 +191,32 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       const gitRes = await fetch(`${import.meta.env.VITE_API_URL}/repository/git`, { signal });
       const gitData = await gitRes.json();
       if (gitData.success) {
-        set({ git: gitData.data });
+        // Normalize: backend GitCommitNode uses authorName/authorEmail/date (Date object serialized)
+        // Frontend GitGraphData.GitCommitNode expects author/timestamp (string)
+        const normalizedGit = {
+          head: gitData.data.head,
+          commits: (gitData.data.commits as any[]).map((c) => ({
+            hash: c.hash,
+            parents: c.parents ?? [],
+            author: c.authorName ?? c.author ?? 'Unknown',
+            authorEmail: c.authorEmail ?? '',
+            // date is serialized as ISO string by JSON.stringify on a Date object
+            timestamp: typeof c.date === 'string'
+              ? c.date
+              : (c.timestamp ?? new Date(c.date).toISOString()),
+            message: c.message ?? '',
+            refs: c.refs ?? [],
+            filesChanged: c.filesChanged ?? [],
+          })),
+        };
+        set({ git: normalizedGit });
       }
 
       set({ analysisProgress: 100, isFetchingGit: false });
 
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        // Fetch aborted
+        // Fetch aborted — state already cleaned up by cancelAnalysis
       } else {
         set({ error: err.message });
       }

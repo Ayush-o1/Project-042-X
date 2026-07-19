@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { 
   ReactFlow, 
+  ReactFlowProvider,
   Background, 
   MiniMap, 
   useNodesState, 
@@ -77,6 +78,9 @@ const FlowWrapper: React.FC = () => {
   }, [git, setNodes, setEdges]);
 
   // Compute highlighting logic
+  // CRITICAL: Do NOT include `edges` (local state) in deps — that causes an infinite loop
+  // because the effect mutates edges via setEdges, which would re-trigger the effect.
+  // Instead, compute connectivity from the stable `git` store data.
   useEffect(() => {
     if (!hoveredNode) {
       setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, dimmed: false } })));
@@ -88,8 +92,19 @@ const FlowWrapper: React.FC = () => {
       return;
     }
 
-    const connectedEdges = edges.filter(e => e.source === hoveredNode || e.target === hoveredNode);
-    const connectedNodeIds = new Set(connectedEdges.flatMap(e => [e.source, e.target]));
+    // Build connected set from the stable git store data (not the local edges state)
+    const connectedNodeIds = new Set<string>([hoveredNode]);
+    if (git) {
+      git.commits.forEach(commit => {
+        // A commit is "connected" to hoveredNode if it is a direct parent or child
+        if (commit.hash === hoveredNode) {
+          commit.parents.forEach(p => connectedNodeIds.add(p));
+        }
+        if (commit.parents.includes(hoveredNode)) {
+          connectedNodeIds.add(commit.hash);
+        }
+      });
+    }
 
     setNodes(nds => nds.map(n => ({
       ...n,
@@ -109,7 +124,7 @@ const FlowWrapper: React.FC = () => {
         }
       };
     }));
-  }, [hoveredNode, edges, setNodes, setEdges]);
+  }, [hoveredNode, git, setNodes, setEdges]);
 
   const handleSearchFocus = (nodeId: string) => {
     const node = nodes.find(n => n.id === nodeId);
@@ -163,7 +178,9 @@ const FlowWrapper: React.FC = () => {
 export const GitGraphView: React.FC = () => {
   return (
     <div style={{ height: '100%', width: '100%', backgroundColor: 'var(--bg-app)' }}>
-      <FlowWrapper />
+      <ReactFlowProvider>
+        <FlowWrapper />
+      </ReactFlowProvider>
     </div>
   );
 };

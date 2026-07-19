@@ -1,50 +1,107 @@
 # Project 042-X Architecture
 
-## Overall Architecture
+## High-Level Architecture
 
-Project 042-X uses a localized Backend-for-Frontend (BFF) architecture. It is divided into a Node.js backend and a React frontend. The backend acts as a high-performance data processing engine, reading files and Git objects directly from the local disk. The frontend acts as a presentation and analytics layer, managing application state, calculating complex insights, and rendering graphical data.
+Project 042-X employs a localized Backend-for-Frontend (BFF) architecture designed for high-performance, synchronous data processing. It is composed of a Node.js API backend and a React-based Single Page Application (SPA) frontend.
 
-The system does not utilize an external database for raw processing. All repository data is processed synchronously during the initial analysis request and cached in the application's memory heap, then streamed to the browser where it can be persistently stored in IndexedDB.
+The application does not use a traditional database. Instead, the backend reads raw file bytes, parses ASTs, and interacts with the `.git` binary natively to construct a unified intelligence model in-memory. This model is served to the frontend, which handles complex mathematical graph layouts, calculates derived insight metrics, and renders the interactive UI. Data persistence is handled client-side via IndexedDB.
 
-## Data Flow
+---
 
-1. The user inputs an absolute filesystem path in the frontend UI.
-2. The frontend sends a `POST /analyze` request to the backend.
-3. The backend validates the path and initializes the `RepositoryIntelligenceEngine`.
-4. The engine orchestrates the `RepositoryScanner`, `ASTEngine`, and `GitEngine` to extract data.
-5. The extracted data is merged into a single `UnifiedRepositoryModel` and streamed sequentially to the frontend to prevent UI freezing.
-6. The frontend calculates structural KPIs (Circular Dependencies, Fan-In, Max Depth) via the `insightsEngine`.
-7. For graphical views, the frontend applies the `dagre` layout algorithm to calculate spatial coordinates for nodes.
-8. The frontend renders the calculated graph using React Flow.
-9. (Optional) The user dumps the entire calculated AST and metrics payload into the browser's IndexedDB via `sessionEngine` for zero-cost subsequent loads.
+## Backend Engine
 
-## Backend Sub-Engines
+The backend is a pipeline of independent analytical engines orchestrated by the `RepositoryIntelligenceEngine`.
 
-### Repository Scanner
-The `RepositoryScanner` performs a recursive, depth-first traversal of the target directory. It catalog files, directories, and metadata while explicitly ignoring `node_modules`, `.git`, `dist`, and `build` to minimize processing overhead.
+### 1. Repository Scanner
+Performs a recursive, depth-first traversal of the specified filesystem path.
+- Resolves absolute vs relative paths.
+- Tracks file sizes and language classifications.
+- Explicitly ignores heavy directories (`node_modules`, `dist`, `build`, `.git`) to minimize I/O overhead.
 
-### AST Engine
-The AST (Abstract Syntax Tree) engine analyzes file dependencies using `@swc/core`. It parses TypeScript and JavaScript source files to generate ASTs. A custom `PathResolver` traverses these trees to identify ES6 import and export statements, resolving relative paths to absolute filesystem paths.
+### 2. AST Engine
+Responsible for semantic code understanding.
+- Utilizes `@swc/core` (Rust-based) to compile and parse TypeScript and JavaScript files into Abstract Syntax Trees (AST).
+- A custom `PathResolver` traverses the AST to extract ES6 `import` and `export` statements.
+- Transforms relative import paths into absolute workspace paths to build a deterministic static dependency graph.
 
-### Git Engine
-The Git Engine extracts version control history using a `simple-git` wrapper. It parses commit histories, authors, branch topologies, and utilizes `--name-only` diffs to calculate file modification heatmaps across the repository's lifespan.
+### 3. Git Engine
+Extracts version control metadata using a `simple-git` wrapper.
+- Parses the Git commit tree to identify parent-child topologies (including merge commits).
+- Captures `--name-only` diffs for every commit.
+- Provides the raw data required for the frontend to calculate file modification hotspots and activity timelines.
 
-## Frontend Sub-Engines
+---
 
-### Insights Engine
-The frontend calculates complex graph metrics mathematically. It implements Tarjan's Strongly Connected Components algorithm to detect circular dependency loops and Depth-First Search (DFS) to identify the longest import chain.
+## Frontend Engine
 
-### Export Engine
-The system generates deterministic reports. It captures high-res PNG/SVG representations of the DOM using `html-to-image` and programmatically paginates PDF documents using `jspdf`.
+The frontend is built with React 18, Vite, and Zustand. It receives the raw `UnifiedRepositoryModel` and computes the presentation layer.
 
-## REST API
-The API layer is built with Express.js. Routes are mounted under `/api/v1/repository`. Incoming requests are validated using `zod` schemas via middleware.
+### 1. State Management (Zustand)
+The `useRepositoryStore` acts as the single source of truth.
+- Normalizes backend DTOs into strongly-typed frontend models.
+- Manages the active tab state, open files array, and modal visibility.
+- Handles the `AbortController` for graceful cancellation of heavy API requests.
 
-## Frontend State Management
-The frontend uses `zustand` to manage application state outside the React component tree. `useRepositoryStore` handles API fetch logic, manages the active file viewers, and coordinates UI Modals (Settings, Compare, History).
+### 2. Insights Engine
+A purely mathematical module that calculates derived metrics from the dependency graph and Git history.
+- **Circular Dependencies**: Implements Tarjan's Strongly Connected Components (SCC) algorithm to detect cycles in the dependency DAG.
+- **Dependency Chains**: Uses memoized Depth-First Search (DFS) to identify the maximum import depth.
+- **Fan-In / Hotspots**: Calculates the in-degree of all nodes to flag over-coupled files.
+- **Git Activity**: Aggregates file modification frequencies to determine the most active modules.
 
-## Technology Decisions & Trade-offs
+### 3. Graph Engine (React Flow + Dagre)
+Separates topological data from spatial data.
+- The backend provides nodes and edges without X/Y coordinates.
+- The frontend uses `dagre` to execute a directed graph layout algorithm (Top-to-Bottom for Git, Left-to-Right for Dependencies).
+- Coordinates are passed to `@xyflow/react` which handles canvas interactions, zooming, panning, and viewport virtualization.
 
-- **IndexedDB over PostgreSQL**: By dumping session payloads into IndexedDB rather than a traditional backend database, the application achieves absolute zero-configuration for end users while bypassing standard 5MB local storage caps.
-- **SWC vs. Babel**: `@swc/core` is written in Rust and compiles to WebAssembly/Native modules, offering parse times exponentially faster than Babel. This is required to process large enterprise repositories without triggering HTTP timeouts.
-- **Frontend Graph Layout**: The backend returns topological data (nodes and connections) without spatial coordinates. The frontend uses `dagre` to perform mathematical graph layouts. This separates data processing from presentation logic.
+### 4. Export & Session Engine
+Provides zero-configuration persistence.
+- **Sessions**: Dumps the entire Zustand store (including AST models) into `idb-keyval` (IndexedDB). Allows instant restoration of massive repositories without re-running the backend analysis.
+- **Exports**: Converts the active React Flow canvas to high-resolution PNG/SVG using `html-to-image`, or generates paginated PDF reports using `jspdf`.
+
+---
+
+## Data Flow & Request Lifecycle
+
+1. **Initialization**: User submits an absolute filesystem path in the UI.
+2. **Analysis Request**: Frontend issues a `POST /api/v1/repository/analyze` request.
+3. **Backend Orchestration**: `RepositoryIntelligenceEngine` invokes the Scanner, AST, and Git engines synchronously.
+4. **Data Unification**: Results are merged into a `UnifiedRepositoryModel`.
+5. **Streaming Transfer**: To prevent UI locking, the frontend requests files, dependencies, and git data sequentially via incremental `GET` requests.
+6. **Normalization**: `useRepositoryStore` normalizes the incoming data (e.g., mapping backend date objects to standardized timestamp strings).
+7. **Metric Computation**: `computeInsights` calculates Tarjan's SCC and DFS metrics.
+8. **Layout Calculation**: `getDagreLayout` computes X/Y coordinates for the graph nodes.
+9. **Rendering**: React Flow paints the virtualized nodes onto the WebGL canvas.
+
+---
+
+## Directory Structure
+
+```text
+Project 042-X/
+├── backend/
+│   ├── src/
+│   │   ├── api/
+│   │   │   ├── controllers/      # Route handlers
+│   │   │   ├── dtos/             # Data Transfer Objects & Zod Schemas
+│   │   │   ├── middlewares/      # Error boundaries and validation
+│   │   │   └── routes/           # Express router definitions
+│   │   ├── core/
+│   │   │   ├── ast/              # SWC parsing and path resolution
+│   │   │   ├── engine/           # Intelligence orchestration
+│   │   │   ├── git/              # simple-git wrapper
+│   │   │   └── scanner/          # Filesystem traversal
+│   │   └── server.ts             # Application entry point
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── graph/            # React Flow and Dagre implementations
+│   │   │   ├── insights/         # Dashboard and metric KPI components
+│   │   │   ├── layout/           # AppShell, Sidebar, Header, Modals
+│   │   │   └── viewer/           # Code Viewer implementation
+│   │   ├── lib/                  # Export, Session, and Insight algorithms
+│   │   ├── store/                # Zustand global state
+│   │   ├── types/                # Strict TypeScript interfaces
+│   │   └── index.css             # Vanilla CSS design system
+```

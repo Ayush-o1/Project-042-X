@@ -171,13 +171,19 @@ export function computeInsights(
   if (git) {
     for (const commit of git.commits) {
       // Activity over time (by Day)
-      const dateStr = commit.timestamp.split('T')[0];
-      commitActivityMap.set(dateStr, (commitActivityMap.get(dateStr) || 0) + 1);
+      // Guard against missing or non-string timestamp field (e.g. sessions pre-normalization)
+      const ts = (commit as any).timestamp ?? (commit as any).date;
+      if (ts && typeof ts === 'string' && ts.includes('T')) {
+        const dateStr = ts.split('T')[0];
+        commitActivityMap.set(dateStr, (commitActivityMap.get(dateStr) || 0) + 1);
+      }
 
       // Files changed
-      if (commit.filesChanged) {
+      if (commit.filesChanged && Array.isArray(commit.filesChanged)) {
         for (const file of commit.filesChanged) {
-          mostActiveGitFilesMap.set(file, (mostActiveGitFilesMap.get(file) || 0) + 1);
+          if (file) {
+            mostActiveGitFilesMap.set(file, (mostActiveGitFilesMap.get(file) || 0) + 1);
+          }
         }
       }
     }
