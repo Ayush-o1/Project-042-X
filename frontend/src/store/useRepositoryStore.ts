@@ -170,7 +170,9 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
         set({ error: err.message });
       }
     } finally {
-      set({ isAnalyzing: false, abortController: null, isFetchingFiles: false, isFetchingDependencies: false, isFetchingGit: false });
+      if (get().abortController === controller) {
+        set({ isAnalyzing: false, abortController: null, isFetchingFiles: false, isFetchingDependencies: false, isFetchingGit: false });
+      }
     }
   },
 
@@ -193,12 +195,18 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/repository/file-content?path=${encodeURIComponent(file.path)}`);
       const data = await res.json();
-      if (!data.success) throw new Error(data.error?.message || 'Failed to read file');
-      set({ activeFileContent: data.data });
+      if (get().activeFile?.path === file.path) {
+        if (!data.success) throw new Error(data.error?.message || 'Failed to read file');
+        set({ activeFileContent: data.data });
+      }
     } catch (err: any) {
-      set({ error: err.message, activeFileContent: null });
+      if (get().activeFile?.path === file.path) {
+        set({ error: err.message, activeFileContent: null });
+      }
     } finally {
-      set({ isFileLoading: false });
+      if (get().activeFile?.path === file.path) {
+        set({ isFileLoading: false });
+      }
     }
   },
 

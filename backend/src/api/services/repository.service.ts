@@ -66,7 +66,8 @@ export class RepositoryService {
     
     // Security check: ensure targetPath is within the repository path to prevent path traversal
     const resolvedPath = path.resolve(targetPath);
-    if (!resolvedPath.startsWith(repoPath)) {
+    // Add path.sep to ensure we match the exact directory boundary (preventing sibling traversal)
+    if (!resolvedPath.startsWith(repoPath + path.sep) && resolvedPath !== repoPath) {
       throw new Error('Access Denied: Path is outside the analyzed repository.');
     }
 

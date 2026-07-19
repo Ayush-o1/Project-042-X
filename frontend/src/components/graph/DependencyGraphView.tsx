@@ -146,7 +146,7 @@ const FlowWrapper: React.FC = () => {
 
   // Compute highlighting logic via BFS
   useEffect(() => {
-    if (!hoveredNode) {
+    if (!hoveredNode || !dependencies) {
       setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, dimmed: false } })));
       setEdges(eds => eds.map(e => ({ 
         ...e, 
@@ -164,14 +164,15 @@ const FlowWrapper: React.FC = () => {
       if (visitedNodes.has(nodeId)) return;
       visitedNodes.add(nodeId);
       
-      edges.forEach(e => {
-        if (direction === 'out' && e.source === nodeId) {
-          visitedEdges.add(e.id);
-          traverse(e.target, direction, visitedNodes, visitedEdges);
+      dependencies.edges.forEach(e => {
+        const edgeId = `${e.sourceId}-${e.targetId}`;
+        if (direction === 'out' && e.sourceId === nodeId) {
+          visitedEdges.add(edgeId);
+          traverse(e.targetId, direction, visitedNodes, visitedEdges);
         }
-        if (direction === 'in' && e.target === nodeId) {
-          visitedEdges.add(e.id);
-          traverse(e.source, direction, visitedNodes, visitedEdges);
+        if (direction === 'in' && e.targetId === nodeId) {
+          visitedEdges.add(edgeId);
+          traverse(e.sourceId, direction, visitedNodes, visitedEdges);
         }
       });
     };
@@ -203,7 +204,7 @@ const FlowWrapper: React.FC = () => {
         },
       };
     }));
-  }, [hoveredNode, edges, setNodes, setEdges]);
+  }, [hoveredNode, dependencies, setNodes, setEdges]);
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type === 'folderNode') return;
