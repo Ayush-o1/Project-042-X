@@ -71,4 +71,14 @@ export class RepositoryController {
       next(error);
     }
   }
+
+  public static async getFileContent(req: Request, res: Response, next: NextFunction) {
+    try {
+      const pathParam = req.query.path as string;
+      const content = await repositoryService.getFileContent(pathParam);
+      res.status(200).json({ success: true, data: content });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

@@ -1,5 +1,7 @@
 import { RepositoryIntelligenceEngine } from '../../core/engine/RepositoryIntelligenceEngine';
 import { UnifiedRepositoryModel } from '../../core/engine/types';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 export class RepositoryService {
   private static instance: RepositoryService;
@@ -56,6 +58,24 @@ export class RepositoryService {
   public getStatistics() {
     this.ensureAnalyzed();
     return this.cachedModel!.statistics;
+  }
+
+  public async getFileContent(targetPath: string): Promise<string> {
+    this.ensureAnalyzed();
+    const repoPath = this.cachedModel!.path;
+    
+    // Security check: ensure targetPath is within the repository path to prevent path traversal
+    const resolvedPath = path.resolve(targetPath);
+    if (!resolvedPath.startsWith(repoPath)) {
+      throw new Error('Access Denied: Path is outside the analyzed repository.');
+    }
+
+    try {
+      const content = await fs.readFile(resolvedPath, 'utf-8');
+      return content;
+    } catch (err: any) {
+      throw new Error(`Failed to read file: ${err.message}`);
+    }
   }
 
   private ensureAnalyzed() {

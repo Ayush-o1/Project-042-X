@@ -69,5 +69,21 @@ describe('API Routes Integration', () => {
     const filesRes = await request(app).get('/api/v1/repository/files');
     expect(filesRes.status).toBe(200);
     expect(filesRes.body.data.length).toBe(1); // main.ts
+
+    // Test file reading
+    const validFileRes = await request(app)
+      .get('/api/v1/repository/file-content')
+      .query({ path: path.join(tempDir, 'main.ts') });
+    expect(validFileRes.status).toBe(200);
+    expect(validFileRes.body.data).toBe('console.log("hello");');
+
+    // Test path traversal security
+    const outsidePath = path.join(os.tmpdir(), 'malicious.txt');
+    await fs.writeFile(outsidePath, 'secret');
+    const invalidFileRes = await request(app)
+      .get('/api/v1/repository/file-content')
+      .query({ path: outsidePath });
+    expect(invalidFileRes.status).toBe(500); // Because it throws an Error currently in service
+    expect(invalidFileRes.body.error.message).toContain('Access Denied');
   });
 });
