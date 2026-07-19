@@ -11,8 +11,7 @@ export class RepositoryController {
       const dto = req.body as AnalyzeRepositoryDto;
       const result = await repositoryService.analyzeRepository(dto.path);
       
-      // We don't want to return the massive JSON map immediately to save bandwidth,
-      // but for Phase 7 API spec, we can return a success indicator or the full model.
+      // We don't want to return the massive JSON map immediately to save bandwidth.
       // Returning just metadata prevents overwhelming the network layer if repo is huge.
       res.status(200).json({
         success: true,

@@ -7,8 +7,8 @@ import { errorHandler } from './api/middlewares/errorHandler';
 export const app = express();
 
 app.use(express.json());
-// Assuming cors is used properly, but Phase 1 server might just have app.use(cors())
-// Let's ensure basic JSON middleware is here.
+// Enable CORS and basic JSON middleware
+
 app.use(require('cors')());
 
 app.use('/api/v1/health', healthRoutes);

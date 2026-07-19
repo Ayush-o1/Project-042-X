@@ -51,23 +51,23 @@ describe('RepositoryIntelligenceEngine', () => {
     // 4. Run the Engine
     const unifiedModel = await engine.analyze(tempDir);
 
-    // Verify Filesystem (Phase 3)
+    // Verify Filesystem
     expect(unifiedModel.files.length).toBe(2);
     const extensions = unifiedModel.files.map(f => f.extension).sort();
     expect(extensions).toEqual(['.ts', '.ts']);
 
-    // Verify AST (Phase 4)
+    // Verify AST
     expect(unifiedModel.dependencies.getAllNodes().length).toBe(2);
     const edges = unifiedModel.dependencies.getAllEdges();
     expect(edges.length).toBe(1);
     expect(edges[0].sourceId).toBe(fileB);
     expect(edges[0].targetId).toBe(fileA);
 
-    // Verify Git (Phase 5)
+    // Verify Git
     expect(unifiedModel.git.commits.size).toBe(2);
     expect(unifiedModel.git.head).toBe(c2.commit);
 
-    // Verify Statistics (Phase 6)
+    // Verify Statistics
     expect(unifiedModel.statistics.totalFiles).toBe(2);
     expect(unifiedModel.statistics.totalCommits).toBe(2);
     expect(unifiedModel.statistics.totalBranches).toBe(2); // main, feature-x
