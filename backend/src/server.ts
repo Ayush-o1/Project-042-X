@@ -1,17 +1,10 @@
-import express, { Request, Response } from 'express';
-import cors from 'cors';
+import { app } from './app';
+import dotenv from 'dotenv';
 
-const app = express();
-const PORT = process.env.PORT || 4000;
+dotenv.config();
 
-app.use(cors());
-app.use(express.json());
-
-// Basic health check endpoint
-app.get('/api/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok', phase: 1 });
-});
+const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
-  console.log(`Project 042-X Backend is running on http://localhost:${PORT}`);
+  console.log(`[Server] Project 042-X Backend listening on port ${PORT}`);
 });
