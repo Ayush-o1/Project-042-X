@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
-import { FolderGit2, Search, Play } from 'lucide-react';
+import { FolderGit2, Search, Play, XCircle } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const [path, setPath] = useState('');
-  const { analyze, metadata, isAnalyzing } = useRepositoryStore();
+  const { analyze, metadata, isAnalyzing, analysisProgress, cancelAnalysis } = useRepositoryStore();
 
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
-    if (path.trim()) {
+    if (path.trim() && !isAnalyzing) {
       analyze(path.trim());
     }
   };
@@ -18,14 +18,15 @@ export const Header: React.FC = () => {
       padding: '0 20px',
       height: '60px',
       backgroundColor: 'var(--bg-app)',
-      borderBottom: '1px solid var(--border-default)'
+      borderBottom: '1px solid var(--border-default)',
+      position: 'relative'
     }}>
-      <div className="flex-center" style={{ gap: '10px' }}>
+      <div className="flex-center" style={{ gap: '10px', width: '250px' }}>
         <FolderGit2 size={20} color="var(--accent-blue)" />
         <h1 className="text-base" style={{ fontWeight: 600 }}>Project 042-X</h1>
       </div>
 
-      <form onSubmit={handleAnalyze} className="flex-center" style={{ gap: '8px', width: '400px' }}>
+      <form onSubmit={handleAnalyze} className="flex-center" style={{ gap: '8px', flex: 1, maxWidth: '500px', margin: '0 20px' }}>
         <div style={{ position: 'relative', flex: 1 }}>
           <Search size={14} color="var(--text-secondary)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
           <input 
@@ -48,17 +49,39 @@ export const Header: React.FC = () => {
             onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
           />
         </div>
-        <button 
-          type="submit" 
-          disabled={isAnalyzing || !path.trim()}
-          className="btn-primary"
-        >
-          <Play size={14} />
-          {isAnalyzing ? 'Analyzing...' : 'Analyze'}
-        </button>
+        {isAnalyzing ? (
+          <button 
+            type="button" 
+            onClick={cancelAnalysis}
+            className="flex-center"
+            style={{
+              padding: '8px 12px',
+              backgroundColor: 'var(--color-danger)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+              gap: '6px'
+            }}
+          >
+            <XCircle size={14} />
+            Cancel
+          </button>
+        ) : (
+          <button 
+            type="submit" 
+            disabled={!path.trim()}
+            className="btn-primary"
+          >
+            <Play size={14} />
+            Analyze
+          </button>
+        )}
       </form>
 
-      <div className="flex-center text-xs" style={{ color: 'var(--text-tertiary)', gap: '16px' }}>
+      <div className="flex-center text-xs" style={{ color: 'var(--text-tertiary)', gap: '16px', width: '250px', justifyContent: 'flex-end' }}>
         {metadata && (
           <>
             <span style={{ color: 'var(--text-secondary)' }}>{metadata.statistics.totalFiles} Files</span>
@@ -69,6 +92,19 @@ export const Header: React.FC = () => {
           </>
         )}
       </div>
+
+      {/* Progress Bar overlay at bottom of header */}
+      {isAnalyzing && (
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          height: '2px',
+          width: `${analysisProgress}%`,
+          backgroundColor: 'var(--accent-blue)',
+          transition: 'width 300ms ease'
+        }} />
+      )}
     </header>
   );
 };

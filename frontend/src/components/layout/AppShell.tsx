@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
-import { CodeViewer } from '../viewer/CodeViewer';
-import { DependencyGraphView } from '../graph/DependencyGraphView';
-import { GitGraphView } from '../graph/GitGraphView';
 import { CommandPalette } from './CommandPalette';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { Loader2, AlertCircle, LayoutDashboard } from 'lucide-react';
+
+const CodeViewer = React.lazy(() => import('../viewer/CodeViewer').then(m => ({ default: m.CodeViewer })));
+const DependencyGraphView = React.lazy(() => import('../graph/DependencyGraphView').then(m => ({ default: m.DependencyGraphView })));
+const GitGraphView = React.lazy(() => import('../graph/GitGraphView').then(m => ({ default: m.GitGraphView })));
 
 export const AppShell: React.FC = () => {
   const { isAnalyzing, error, metadata, activeTab, setActiveTab, setCommandPaletteOpen, activeFile, closeFile } = useRepositoryStore();
@@ -120,11 +121,16 @@ export const AppShell: React.FC = () => {
                 </div>
               </div>
             ) : metadata ? (
-              <>
+              <Suspense fallback={
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
+                  <Loader2 size={24} className="animate-spin" style={{ marginBottom: '12px', color: 'var(--accent-blue)' }} />
+                  <p className="text-sm">Loading Module...</p>
+                </div>
+              }>
                 {activeTab === 'code' && <CodeViewer />}
                 {activeTab === 'dependencies' && <DependencyGraphView />}
                 {activeTab === 'git' && <GitGraphView />}
-              </>
+              </Suspense>
             ) : null}
           </div>
         </main>
