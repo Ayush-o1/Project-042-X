@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { FileCode2, FileJson, Image as ImageIcon, File } from 'lucide-react';
 
@@ -5,17 +6,21 @@ interface FileNodeData {
   label: string;
   type: string;
   path: string;
+  dimmed?: boolean;
 }
 
-export const FileNode = ({ data, selected }: { data: FileNodeData, selected?: boolean }) => {
-  const getIcon = () => {
-    if (!data?.label) return <File size={16} color="var(--text-tertiary)" />;
+export const FileNode = memo(({ data, selected }: { data: FileNodeData, selected?: boolean }) => {
+  const getLanguageDetails = () => {
+    if (!data?.label) return { icon: <File size={16} color="var(--text-tertiary)" />, color: 'var(--text-tertiary)' };
     const ext = data.label.substring(data.label.lastIndexOf('.'));
-    if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return <FileCode2 size={16} color="var(--accent-blue)" />;
-    if (['.json', '.md'].includes(ext)) return <FileJson size={16} color="var(--color-success)" />;
-    if (['.png', '.jpg', '.svg'].includes(ext)) return <ImageIcon size={16} color="#8b5cf6" />;
-    return <File size={16} color="var(--text-secondary)" />;
+    if (['.ts', '.tsx'].includes(ext)) return { icon: <FileCode2 size={16} color="#3178c6" />, color: '#3178c6' };
+    if (['.js', '.jsx'].includes(ext)) return { icon: <FileCode2 size={16} color="#f7df1e" />, color: '#f7df1e' };
+    if (['.json', '.md'].includes(ext)) return { icon: <FileJson size={16} color="var(--color-success)" />, color: 'var(--color-success)' };
+    if (['.png', '.jpg', '.svg'].includes(ext)) return { icon: <ImageIcon size={16} color="#8b5cf6" />, color: '#8b5cf6' };
+    return { icon: <File size={16} color="var(--text-secondary)" />, color: 'var(--text-secondary)' };
   };
+
+  const { icon, color } = getLanguageDetails();
 
   return (
     <div 
@@ -24,20 +29,22 @@ export const FileNode = ({ data, selected }: { data: FileNodeData, selected?: bo
       padding: '12px 16px',
       backgroundColor: selected ? 'var(--bg-active)' : 'var(--bg-surface)',
       border: `1px solid ${selected ? 'var(--accent-blue)' : 'var(--border-default)'}`,
+      borderLeft: `3px solid ${color}`,
       boxShadow: selected ? '0 0 0 1px var(--accent-blue), 0 4px 6px -1px rgba(0,0,0,0.5)' : '0 4px 6px -1px rgba(0,0,0,0.5)',
       display: 'flex',
       alignItems: 'center',
       gap: '12px',
       width: '250px',
       color: 'var(--text-primary)',
-      transition: 'transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease',
+      transition: 'transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, opacity 300ms ease',
       transform: selected ? 'scale(1.02)' : 'scale(1)',
+      opacity: data.dimmed ? 0.2 : 1,
     }}
-      onMouseEnter={(e) => { if(!selected) e.currentTarget.style.transform = 'scale(1.02)'; }}
+      onMouseEnter={(e) => { if(!selected && !data.dimmed) e.currentTarget.style.transform = 'scale(1.02)'; }}
       onMouseLeave={(e) => { if(!selected) e.currentTarget.style.transform = 'scale(1)'; }}
     >
       <Handle type="target" position={Position.Left} style={{ background: 'var(--border-focus)', border: 'none' }} />
-      {getIcon()}
+      {icon}
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <span style={{ fontSize: '13px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {data?.label || 'Unknown'}
@@ -49,4 +56,6 @@ export const FileNode = ({ data, selected }: { data: FileNodeData, selected?: bo
       <Handle type="source" position={Position.Right} style={{ background: 'var(--accent-blue)', border: 'none' }} />
     </div>
   );
-};
+});
+
+FileNode.displayName = 'FileNode';
