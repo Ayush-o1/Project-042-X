@@ -47,6 +47,7 @@ export interface GitCommitNode {
   timestamp: string;
   message: string;
   refs: string[];
+  filesChanged: string[];
 }
 
 export interface GitGraphData {

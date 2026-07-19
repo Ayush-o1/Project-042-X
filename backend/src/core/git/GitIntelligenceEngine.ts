@@ -17,7 +17,7 @@ export class GitIntelligenceEngine {
 
     await this.verifyRepository(git, repoPath);
 
-    const logArgs = ['--all', `--format=${LOG_FORMAT}`];
+    const logArgs = ['--all', `--format=${LOG_FORMAT}`, '--name-only'];
     if (maxCount) {
       logArgs.push(`--max-count=${maxCount}`);
     }
@@ -38,32 +38,45 @@ export class GitIntelligenceEngine {
 
     const commits = new Map<string, GitCommitNode>();
     let headHash: string | null = null;
+    let currentCommitHash: string | null = null;
 
-    const lines = rawLog.split('\n').filter(line => line.trim().length > 0);
+    const lines = rawLog.split('\n');
 
     for (const line of lines) {
-      const parts = line.split(DELIMITER);
-      if (parts.length !== 7) continue;
+      if (line.trim().length === 0) continue;
 
-      const [hash, parentsRaw, authorName, authorEmail, dateIso, message, refsRaw] = parts;
+      if (line.includes(DELIMITER)) {
+        const parts = line.split(DELIMITER);
+        if (parts.length !== 7) continue;
 
-      const parents = parentsRaw ? parentsRaw.split(' ').filter(p => p.length > 0) : [];
-      const refs = refsRaw ? refsRaw.split(', ').filter(r => r.length > 0) : [];
+        const [hash, parentsRaw, authorName, authorEmail, dateIso, message, refsRaw] = parts;
+        const parents = parentsRaw ? parentsRaw.split(' ').filter(p => p.length > 0) : [];
+        const refs = refsRaw ? refsRaw.split(', ').filter(r => r.length > 0) : [];
 
-      // Check if this commit is the current HEAD
-      if (refs.includes('HEAD') || refs.some(r => r.startsWith('HEAD ->'))) {
-        headHash = hash;
+        if (refs.includes('HEAD') || refs.some(r => r.startsWith('HEAD ->'))) {
+          headHash = hash;
+        }
+
+        commits.set(hash, {
+          hash,
+          parents,
+          authorName,
+          authorEmail,
+          date: new Date(dateIso),
+          message,
+          refs,
+          filesChanged: [],
+        });
+        currentCommitHash = hash;
+      } else {
+        // It's a file path
+        if (currentCommitHash) {
+          const commit = commits.get(currentCommitHash);
+          if (commit) {
+            commit.filesChanged.push(line.trim());
+          }
+        }
       }
-
-      commits.set(hash, {
-        hash,
-        parents,
-        authorName,
-        authorEmail,
-        date: new Date(dateIso),
-        message,
-        refs,
-      });
     }
 
     return {

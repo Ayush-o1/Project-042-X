@@ -8,6 +8,7 @@ import { Loader2, AlertCircle, LayoutDashboard } from 'lucide-react';
 const CodeViewer = React.lazy(() => import('../viewer/CodeViewer').then(m => ({ default: m.CodeViewer })));
 const DependencyGraphView = React.lazy(() => import('../graph/DependencyGraphView').then(m => ({ default: m.DependencyGraphView })));
 const GitGraphView = React.lazy(() => import('../graph/GitGraphView').then(m => ({ default: m.GitGraphView })));
+const InsightsDashboard = React.lazy(() => import('../insights/InsightsDashboard').then(m => ({ default: m.InsightsDashboard })));
 
 export const AppShell: React.FC = () => {
   const { isAnalyzing, error, metadata, activeTab, setActiveTab, setCommandPaletteOpen, activeFile, closeFile } = useRepositoryStore();
@@ -93,6 +94,21 @@ export const AppShell: React.FC = () => {
               >
                 Git Timeline
               </button>
+              <button 
+                onClick={() => setActiveTab('insights')}
+                className="text-sm"
+                style={{ 
+                  padding: '6px 16px', 
+                  borderRadius: '6px',
+                  background: activeTab === 'insights' ? 'var(--bg-active)' : 'transparent', 
+                  color: activeTab === 'insights' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontWeight: activeTab === 'insights' ? 500 : 400,
+                  cursor: 'pointer',
+                  transition: 'all 150ms ease-out'
+                }}
+              >
+                Insights
+              </button>
             </div>
           </div>
 
@@ -130,6 +146,7 @@ export const AppShell: React.FC = () => {
                 {activeTab === 'code' && <CodeViewer />}
                 {activeTab === 'dependencies' && <DependencyGraphView />}
                 {activeTab === 'git' && <GitGraphView />}
+                {activeTab === 'insights' && <InsightsDashboard />}
               </Suspense>
             ) : null}
           </div>

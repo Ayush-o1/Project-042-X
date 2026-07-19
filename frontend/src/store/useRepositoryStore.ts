@@ -20,7 +20,7 @@ interface RepositoryState {
   openFiles: FileModel[];
   activeFileContent: string | null;
   isFileLoading: boolean;
-  activeTab: 'code' | 'dependencies' | 'git';
+  activeTab: 'code' | 'dependencies' | 'git' | 'insights';
 
   // DX State
   favorites: FileModel[];
@@ -33,7 +33,7 @@ interface RepositoryState {
   cancelAnalysis: () => void;
   setActiveFile: (file: FileModel) => Promise<void>;
   closeFile: (path: string) => void;
-  setActiveTab: (tab: 'code' | 'dependencies' | 'git') => void;
+  setActiveTab: (tab: 'code' | 'dependencies' | 'git' | 'insights') => void;
   toggleFolder: (path: string) => void;
   toggleFavorite: (file: FileModel) => void;
   setCommandPaletteOpen: (isOpen: boolean) => void;
@@ -193,7 +193,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     set({ openFiles: newOpenFiles, activeFile: newActiveFile, activeFileContent: newContent });
   },
 
-  setActiveTab: (tab: 'code' | 'dependencies' | 'git') => {
+  setActiveTab: (tab: 'code' | 'dependencies' | 'git' | 'insights') => {
     set({ activeTab: tab });
   },
 

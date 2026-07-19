@@ -6,6 +6,7 @@ export interface GitCommitNode {
   date: Date;
   message: string;
   refs: string[]; // Branches, tags, HEAD
+  filesChanged: string[];
 }
 
 export interface GitGraph {
