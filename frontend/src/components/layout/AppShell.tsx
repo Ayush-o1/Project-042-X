@@ -5,13 +5,21 @@ import { CommandPalette } from './CommandPalette';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { Loader2, AlertCircle, LayoutDashboard } from 'lucide-react';
 
+import { SettingsModal } from './SettingsModal';
+import { SessionHistory } from './SessionHistory';
+import { CompareSnapshots } from '../insights/CompareSnapshots';
+import { saveSession } from '../../lib/sessionEngine';
+import { exportReportPdf } from '../../lib/exportEngine';
+import { computeInsights } from '../../lib/insightsEngine';
+
 const CodeViewer = React.lazy(() => import('../viewer/CodeViewer').then(m => ({ default: m.CodeViewer })));
 const DependencyGraphView = React.lazy(() => import('../graph/DependencyGraphView').then(m => ({ default: m.DependencyGraphView })));
 const GitGraphView = React.lazy(() => import('../graph/GitGraphView').then(m => ({ default: m.GitGraphView })));
 const InsightsDashboard = React.lazy(() => import('../insights/InsightsDashboard').then(m => ({ default: m.InsightsDashboard })));
 
 export const AppShell: React.FC = () => {
-  const { isAnalyzing, error, metadata, activeTab, setActiveTab, setCommandPaletteOpen, activeFile, closeFile } = useRepositoryStore();
+  const store = useRepositoryStore();
+  const { isAnalyzing, error, metadata, activeTab, setActiveTab, setCommandPaletteOpen, activeFile, closeFile, files, dependencies, git } = store;
 
   React.useEffect(() => {
     const handleGlobalKeys = (e: KeyboardEvent) => {
@@ -23,10 +31,26 @@ export const AppShell: React.FC = () => {
         e.preventDefault();
         if (activeFile) closeFile(activeFile.path);
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        if (metadata) {
+          const insights = computeInsights(files, dependencies, git);
+          saveSession(metadata.name, metadata, files, dependencies, git, insights).then(() => {
+            alert('Session saved via shortcut!');
+          }).catch(console.error);
+        }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        if (metadata) {
+          const insights = computeInsights(files, dependencies, git);
+          exportReportPdf(metadata, insights);
+        }
+      }
     };
     window.addEventListener('keydown', handleGlobalKeys);
     return () => window.removeEventListener('keydown', handleGlobalKeys);
-  }, [setCommandPaletteOpen, activeFile, closeFile]);
+  }, [setCommandPaletteOpen, activeFile, closeFile, metadata, files, dependencies, git]);
 
   return (
     <div style={{ display: 'grid', gridTemplateRows: '60px 1fr', height: '100vh', width: '100vw' }}>
@@ -153,6 +177,9 @@ export const AppShell: React.FC = () => {
         </main>
       </div>
       <CommandPalette />
+      <SettingsModal />
+      <SessionHistory />
+      <CompareSnapshots />
     </div>
   );
 };

@@ -27,6 +27,9 @@ interface RepositoryState {
   recentFiles: FileModel[];
   expandedFolders: Record<string, boolean>;
   commandPaletteOpen: boolean;
+  isSettingsOpen: boolean;
+  isSessionHistoryOpen: boolean;
+  isCompareModalOpen: boolean;
 
   // Actions
   analyze: (path: string) => Promise<void>;
@@ -37,6 +40,10 @@ interface RepositoryState {
   toggleFolder: (path: string) => void;
   toggleFavorite: (file: FileModel) => void;
   setCommandPaletteOpen: (isOpen: boolean) => void;
+  setSettingsOpen: (isOpen: boolean) => void;
+  setSessionHistoryOpen: (isOpen: boolean) => void;
+  setCompareModalOpen: (isOpen: boolean) => void;
+  loadSessionIntoStore: (session: any) => void;
 }
 
 export const useRepositoryStore = create<RepositoryState>((set, get) => ({
@@ -63,6 +70,9 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   recentFiles: [],
   expandedFolders: {},
   commandPaletteOpen: false,
+  isSettingsOpen: false,
+  isSessionHistoryOpen: false,
+  isCompareModalOpen: false,
 
   cancelAnalysis: () => {
     const { abortController } = get();
@@ -78,6 +88,23 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
         error: 'Analysis cancelled by user.' 
       });
     }
+  },
+
+  loadSessionIntoStore: (session: any) => {
+    set({
+      metadata: session.metadata,
+      files: session.files,
+      dependencies: session.dependencies,
+      git: session.git,
+      error: null,
+      isAnalyzing: false,
+      isFetchingFiles: false,
+      isFetchingDependencies: false,
+      isFetchingGit: false,
+      analysisProgress: 100,
+      activeTab: 'insights',
+      isSessionHistoryOpen: false
+    });
   },
 
   analyze: async (path: string) => {
@@ -216,5 +243,17 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
 
   setCommandPaletteOpen: (isOpen: boolean) => {
     set({ commandPaletteOpen: isOpen });
+  },
+  
+  setSettingsOpen: (isOpen: boolean) => {
+    set({ isSettingsOpen: isOpen });
+  },
+
+  setSessionHistoryOpen: (isOpen: boolean) => {
+    set({ isSessionHistoryOpen: isOpen });
+  },
+
+  setCompareModalOpen: (isOpen: boolean) => {
+    set({ isCompareModalOpen: isOpen });
   }
 }));

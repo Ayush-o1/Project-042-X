@@ -12,6 +12,9 @@
   "dependencies": {
     "@xyflow/react": "^12.11.2",
     "dagre": "^0.8.5",
+    "html-to-image": "^1.11.13",
+    "idb-keyval": "^6.3.0",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.25.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
