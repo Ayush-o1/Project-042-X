@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Repository {
+  id        String       @id @default(cuid())
+  name      String
+  path      String       @unique
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  files     FileNode[]
+  commits   CommitNode[]
+}
+
+model FileNode {
+  id           String           @id @default(cuid())
+  repositoryId String
+  repository   Repository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  path         String
+  extension    String?
+  sizeBytes    Int
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  
+  // Relations
+  imports      DependencyEdge[] @relation("SourceFile")
+  importedBy   DependencyEdge[] @relation("TargetFile")
+  fileChanges  FileChange[]
+
+  @@unique([repositoryId, path])
+}
+
+model DependencyEdge {
+  id           String   @id @default(cuid())
+  sourceId     String
+  targetId     String
+  type         String   // e.g., "static", "dynamic"
+  
+  sourceFile   FileNode @relation("SourceFile", fields: [sourceId], references: [id], onDelete: Cascade)
+  targetFile   FileNode @relation("TargetFile", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetId])
+}
+
+model CommitNode {
+  hash         String       @id
+  repositoryId String
+  repository   Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  message      String
+  author       String
+  timestamp    DateTime
+
+  // Relations
+  parentEdges  CommitEdge[] @relation("ParentCommit")
+  childEdges   CommitEdge[] @relation("ChildCommit")
+  fileChanges  FileChange[]
+
+  @@index([repositoryId])
+}
+
+model CommitEdge {
+  parentHash   String
+  childHash    String
+
+  parentCommit CommitNode @relation("ParentCommit", fields: [parentHash], references: [hash], onDelete: Cascade)
+  childCommit  CommitNode @relation("ChildCommit", fields: [childHash], references: [hash], onDelete: Cascade)
+
+  @@id([parentHash, childHash])
+}
+
+model FileChange {
+  id           String     @id @default(cuid())
+  commitHash   String
+  fileId       String
+  status       String     // e.g., "added", "modified", "deleted"
+
+  commit       CommitNode @relation(fields: [commitHash], references: [hash], onDelete: Cascade)
+  file         FileNode   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([commitHash, fileId])
+}
