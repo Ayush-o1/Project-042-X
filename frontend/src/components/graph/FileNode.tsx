@@ -9,6 +9,7 @@ interface FileNodeData {
 
 export const FileNode = ({ data, selected }: { data: FileNodeData, selected?: boolean }) => {
   const getIcon = () => {
+    if (!data?.label) return <File size={16} color="var(--text-secondary)" />;
     const ext = data.label.substring(data.label.lastIndexOf('.'));
     if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return <FileCode2 size={16} color="#3b82f6" />;
     if (['.json', '.md'].includes(ext)) return <FileJson size={16} color="#10b981" />;
@@ -34,10 +35,10 @@ export const FileNode = ({ data, selected }: { data: FileNodeData, selected?: bo
       {getIcon()}
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <span style={{ fontSize: '13px', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {data.label}
+          {data?.label || 'Unknown'}
         </span>
         <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {data.path.substring(data.path.lastIndexOf('/') + 1)}
+          {data?.path ? data.path.substring(data.path.lastIndexOf('/') + 1) : 'Unknown Path'}
         </span>
       </div>
       <Handle type="source" position={Position.Right} style={{ background: 'var(--accent)' }} />
