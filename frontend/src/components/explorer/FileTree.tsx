@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ChevronRight, ChevronDown, File, FileCode2, FileJson, Image as ImageIcon } from 'lucide-react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 
 export const FileTree: React.FC<{ node: any, depth: number }> = ({ node, depth }) => {
-  const [isOpen, setIsOpen] = useState(depth === 0);
-  const { setActiveFile, activeFile } = useRepositoryStore();
+  const { setActiveFile, activeFile, expandedFolders, toggleFolder, toggleFavorite, favorites } = useRepositoryStore();
+  const isOpen = expandedFolders[node.path] || false;
 
   const isSelected = activeFile?.path === node.file?.path;
 
@@ -19,9 +19,11 @@ export const FileTree: React.FC<{ node: any, depth: number }> = ({ node, depth }
   };
 
   const handleToggle = () => {
-    if (node.isDirectory) setIsOpen(!isOpen);
+    if (node.isDirectory) toggleFolder(node.path);
     else if (node.file) setActiveFile(node.file);
   };
+
+  const isFav = favorites.find(f => f.path === node.file?.path);
 
   const childrenNodes = node.children ? Object.values(node.children) : [];
   childrenNodes.sort((a: any, b: any) => {
@@ -58,9 +60,24 @@ export const FileTree: React.FC<{ node: any, depth: number }> = ({ node, depth }
         <span style={{ display: 'flex', alignItems: 'center', width: '16px', opacity: node.isDirectory ? 0.7 : 1 }}>
           {getIcon()}
         </span>
-        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
           {node.name}
         </span>
+        {!node.isDirectory && (
+          <span 
+            onClick={(e) => { e.stopPropagation(); toggleFavorite(node.file); }}
+            style={{ 
+              opacity: isFav || isSelected ? 1 : 0,
+              color: isFav ? 'var(--color-warning)' : 'var(--text-tertiary)',
+              transition: 'opacity 150ms ease',
+              display: 'flex',
+              alignItems: 'center'
+            }}
+            className="favorite-btn"
+          >
+            ★
+          </span>
+        )}
       </div>
 
       {isOpen && node.isDirectory && (

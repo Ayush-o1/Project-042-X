@@ -4,11 +4,27 @@ import { Sidebar } from './Sidebar';
 import { CodeViewer } from '../viewer/CodeViewer';
 import { DependencyGraphView } from '../graph/DependencyGraphView';
 import { GitGraphView } from '../graph/GitGraphView';
+import { CommandPalette } from './CommandPalette';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { Loader2, AlertCircle, LayoutDashboard } from 'lucide-react';
 
 export const AppShell: React.FC = () => {
-  const { isAnalyzing, error, metadata, activeTab, setActiveTab } = useRepositoryStore();
+  const { isAnalyzing, error, metadata, activeTab, setActiveTab, setCommandPaletteOpen, activeFile, closeFile } = useRepositoryStore();
+
+  React.useEffect(() => {
+    const handleGlobalKeys = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'p')) {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        e.preventDefault();
+        if (activeFile) closeFile(activeFile.path);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeys);
+    return () => window.removeEventListener('keydown', handleGlobalKeys);
+  }, [setCommandPaletteOpen, activeFile, closeFile]);
 
   return (
     <div style={{ display: 'grid', gridTemplateRows: '60px 1fr', height: '100vh', width: '100vw' }}>
@@ -113,6 +129,7 @@ export const AppShell: React.FC = () => {
           </div>
         </main>
       </div>
+      <CommandPalette />
     </div>
   );
 };

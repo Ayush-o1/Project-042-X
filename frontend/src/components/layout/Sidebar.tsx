@@ -13,7 +13,7 @@ interface TreeNode {
 }
 
 export const Sidebar: React.FC = () => {
-  const { files, metadata } = useRepositoryStore();
+  const { files, metadata, favorites, openFiles, setActiveFile, activeFile, closeFile } = useRepositoryStore();
 
   const fileTree = useMemo(() => {
     if (!metadata || files.length === 0) return null;
@@ -57,17 +57,73 @@ export const Sidebar: React.FC = () => {
       flexDirection: 'column',
       overflow: 'hidden'
     }}>
-      <div className="text-xs" style={{ padding: '16px 20px 8px 20px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.05em' }}>
-        Explorer
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 10px 20px 10px' }}>
-        {fileTree ? (
-          <FileTree node={fileTree} depth={0} />
-        ) : (
-          <div className="text-sm" style={{ padding: '20px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-            No repository loaded.
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        
+        {/* OPEN EDITORS */}
+        {openFiles.length > 0 && (
+          <div style={{ marginBottom: '12px' }}>
+            <div className="text-xs" style={{ padding: '16px 20px 8px 20px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.05em' }}>
+              Open Editors
+            </div>
+            <div style={{ padding: '0 10px' }}>
+              {openFiles.map(f => (
+                <div key={f.path} className="flex-between" style={{
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: activeFile?.path === f.path ? 'var(--bg-active)' : 'transparent',
+                  color: activeFile?.path === f.path ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+                onClick={() => setActiveFile(f)}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path.substring(f.path.lastIndexOf('/') + 1)}</span>
+                  <span onClick={(e) => { e.stopPropagation(); closeFile(f.path); }} style={{ cursor: 'pointer', opacity: 0.6 }}>×</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
+        {/* FAVORITES */}
+        {favorites.length > 0 && (
+          <div style={{ marginBottom: '12px' }}>
+            <div className="text-xs" style={{ padding: '16px 20px 8px 20px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.05em' }}>
+              Favorites
+            </div>
+            <div style={{ padding: '0 10px' }}>
+              {favorites.map(f => (
+                <div key={f.path} className="flex-between" style={{
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: activeFile?.path === f.path ? 'var(--accent-blue-bg)' : 'transparent',
+                  color: activeFile?.path === f.path ? 'var(--accent-blue)' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+                onClick={() => setActiveFile(f)}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path.substring(f.path.lastIndexOf('/') + 1)}</span>
+                  <span style={{ color: 'var(--color-warning)' }}>★</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* EXPLORER */}
+        <div>
+          <div className="text-xs" style={{ padding: '16px 20px 8px 20px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.05em' }}>
+            Explorer
+          </div>
+          <div style={{ padding: '0 10px 20px 10px' }}>
+            {fileTree ? (
+              <FileTree node={fileTree} depth={0} />
+            ) : (
+              <div className="text-sm" style={{ padding: '20px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
+                No repository loaded.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </aside>
   );
