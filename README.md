@@ -7,7 +7,7 @@ The goal of this tool is to assist developers in understanding unfamiliar codeba
 ## Features
 
 - **Dependency Graph**: Parses TypeScript and JavaScript files to map exact module imports and exports into a directed graph.
-- **Git History Graph**: Reads native `.git` objects to reconstruct the commit timeline, branches, and tags as a directed acyclic graph (DAG).
+- **Git History Graph**: Uses `simple-git` to read the repository and reconstruct the commit timeline, branches, and tags as a directed acyclic graph (DAG).
 - **Interactive Visualization**: Renders graphs on an interactive canvas supporting panning, zooming, and node selection.
 - **Integrated Code Viewer**: Links architecture nodes to the physical file system, allowing users to view the raw source code of selected files without leaving the context of the graph.
 - **Local First**: Runs entirely on the local machine without requiring external databases or cloud synchronization.
@@ -53,7 +53,7 @@ Project 042-X/
 │   │   ├── core/
 │   │   │   ├── ast/          # SWC parsing and dependency resolution
 │   │   │   ├── engine/       # Orchestration layer
-│   │   │   ├── git/          # Native Git object parsing
+│   │   │   ├── git/          # Git repository parsing
 │   │   │   └── scanner/      # Filesystem traversal
 │   │   └── utils/            # Helper functions
 │   ├── package.json

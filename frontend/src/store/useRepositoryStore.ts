@@ -33,7 +33,7 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
   analyze: async (path: string) => {
     set({ isAnalyzing: true, error: null });
     try {
-      const res = await fetch('http://localhost:5001/api/v1/repository/analyze', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/repository/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path }),
@@ -48,9 +48,9 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
 
       // Fetch files, dependencies, and git natively
       const [filesRes, depRes, gitRes] = await Promise.all([
-        fetch('http://localhost:5001/api/v1/repository/files'),
-        fetch('http://localhost:5001/api/v1/repository/dependencies'),
-        fetch('http://localhost:5001/api/v1/repository/git')
+        fetch(`${import.meta.env.VITE_API_URL}/repository/files`),
+        fetch(`${import.meta.env.VITE_API_URL}/repository/dependencies`),
+        fetch(`${import.meta.env.VITE_API_URL}/repository/git`)
       ]);
       
       const filesData = await filesRes.json();
@@ -73,7 +73,7 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
 
     set({ activeFile: file, isFileLoading: true, error: null, activeTab: 'code' });
     try {
-      const res = await fetch(`http://localhost:5001/api/v1/repository/file-content?path=${encodeURIComponent(file.path)}`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/repository/file-content?path=${encodeURIComponent(file.path)}`);
       const data = await res.json();
       if (!data.success) throw new Error(data.error?.message || 'Failed to read file');
       set({ activeFileContent: data.data });

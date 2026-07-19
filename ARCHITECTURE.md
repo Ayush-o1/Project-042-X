@@ -32,8 +32,8 @@ The AST (Abstract Syntax Tree) engine analyzes file dependencies.
 
 ### Git Engine
 The Git Engine extracts version control history.
-- **Technology**: Native Node.js `fs` module and `zlib`.
-- **Function**: It bypasses the standard `git` CLI entirely. Instead, it directly reads binary files within the `.git/objects` and `.git/refs` directories. It decompresses commit objects, parses the text to find parent hashes, authors, and messages, and correlates them with branch and tag references.
+- **Technology**: `simple-git` wrapper.
+- **Function**: It uses a Node.js wrapper to interact with the host operating system's Git executable. It parses commit histories to find parent hashes, authors, and messages, and correlates them with branch and tag references.
 - **Output**: A directed acyclic graph (DAG) representing the commit timeline.
 
 ### Repository Intelligence Engine
@@ -61,4 +61,3 @@ Visualizing the architecture requires mapping conceptual relationships into a 2D
 
 - **No Database**: By maintaining data in memory rather than a database (e.g., PostgreSQL), the application achieves significantly lower latency during read operations. The trade-off is higher RAM consumption and the loss of data persistence between server restarts.
 - **SWC vs. Babel**: `@swc/core` is written in Rust and compiles to WebAssembly/Native modules, offering parse times faster than Babel. This is required to process large repositories without triggering HTTP timeouts.
-- **Native Git Parsing**: Reading `.git` objects directly rather than spawning child processes for the `git` CLI reduces process overhead and operating system dependencies. However, it increases the complexity of the parsing logic and may not support newer Git features (like sparse-checkout objects) without explicit implementation.
