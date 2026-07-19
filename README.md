@@ -1,59 +1,139 @@
-# Project 042-X: Repository Intelligence Engine
+# Project 042-X
 
-> Interactive Git Repository Intelligence & Architecture Visualization Platform
+Project 042-X is a local developer tool for visualizing software architecture and version control history. It processes a local Git repository and generates an interactive, two-dimensional map of file dependencies and Git history.
 
-Project 042-X is a high-performance developer tool designed to solve a critical engineering problem: **Understanding unfamiliar codebases.** 
+The goal of this tool is to assist developers in understanding unfamiliar codebases by providing a visual representation of how components interact and how the repository evolved over time.
 
-Instead of manually tracing imports across hundreds of files or wrestling with obscure Git histories, Project 042-X acts as a visual "Google Maps for your Git Repository." Point it at any local Git repository, and it immediately generates a 2D interactive architectural map of dependencies, alongside a chronological DAG of your Git history.
+## Features
 
-## ✨ Features
+- **Dependency Graph**: Parses TypeScript and JavaScript files to map exact module imports and exports into a directed graph.
+- **Git History Graph**: Reads native `.git` objects to reconstruct the commit timeline, branches, and tags as a directed acyclic graph (DAG).
+- **Interactive Visualization**: Renders graphs on an interactive canvas supporting panning, zooming, and node selection.
+- **Integrated Code Viewer**: Links architecture nodes to the physical file system, allowing users to view the raw source code of selected files without leaving the context of the graph.
+- **Local First**: Runs entirely on the local machine without requiring external databases or cloud synchronization.
 
-- **Blazing Fast AST Parsing**: Leverages the SWC Rust-based compiler to parse thousands of TypeScript/JavaScript files in milliseconds.
-- **Topological Dependency Graphing**: Automatically maps the exact import/export relationships between every file in the project.
-- **Interactive Visualization**: Powered by `reactflow` and `dagre` mathematics, instantly mapping complex code architectures into a frictionless, zooming, panning 2D canvas.
-- **Git Intelligence Engine**: Natively reads `.git` directories directly from the file system without requiring a host environment, visualizing branches, merges, and tags.
-- **Code Viewer Integration**: Click any architectural node to instantly view its raw source code in an integrated IDE-like side panel.
-- **Premium Desktop UX**: Modeled after modern tools like Linear and Raycast, providing a native, zero-latency stateful experience powered by `zustand`.
+## Screenshots
 
-## 🛠 Tech Stack
+*(Placeholder for screenshots of the Dependency Graph, Git Graph, and Code Viewer)*
 
-- **Frontend**: React 18, Vite, TypeScript, Zustand, Lucide React, React Flow (`@xyflow/react`)
-- **Backend**: Node.js, Express, TypeScript, Zod, SWC (`@swc/core`)
-- **Algorithms**: topological DAG sorting, DAGRE auto-layout routing
+## Architecture Overview
+
+The system follows a Backend-for-Frontend (BFF) pattern:
+
+1. **Backend (Node.js/Express)**: Operates as a local daemon. It utilizes `@swc/core` for Abstract Syntax Tree (AST) parsing and custom logic for reading binary Git object files. It combines this data into a unified JSON structure and serves it via a REST API.
+2. **Frontend (React/Vite)**: Consumes the API using `zustand` for state management. It calculates graph coordinates using `dagre` and renders the UI using `@xyflow/react`.
+
+For an in-depth breakdown of the internal engines, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+## Technology Stack
+
+### Frontend
+- **Framework**: React 18
+- **Build Tool**: Vite
+- **Language**: TypeScript
+- **State Management**: Zustand
+- **Graph Engine**: React Flow (`@xyflow/react`)
+- **Layout Algorithm**: Dagre
+
+### Backend
+- **Runtime**: Node.js
+- **Server**: Express
+- **Language**: TypeScript
+- **AST Parser**: SWC (`@swc/core`)
+- **Validation**: Zod
 - **Testing**: Vitest, Supertest
 
-## 🚀 Installation & Usage
+## Folder Structure
 
-Project 042-X runs completely locally. It requires zero cloud configuration and does not rely on any database, protecting your proprietary code.
+```text
+Project 042-X/
+├── backend/                  # Node.js backend application
+│   ├── src/
+│   │   ├── api/              # Express routes, controllers, services
+│   │   ├── core/
+│   │   │   ├── ast/          # SWC parsing and dependency resolution
+│   │   │   ├── engine/       # Orchestration layer
+│   │   │   ├── git/          # Native Git object parsing
+│   │   │   └── scanner/      # Filesystem traversal
+│   │   └── utils/            # Helper functions
+│   ├── package.json
+│   └── tsconfig.json
+├── frontend/                 # React frontend application
+│   ├── src/
+│   │   ├── components/       # React components (layout, graph, viewer)
+│   │   ├── store/            # Zustand state store
+│   │   ├── types/            # TypeScript interfaces
+│   │   ├── App.tsx           # Entry component
+│   │   └── index.css         # Global styles
+│   ├── package.json
+│   └── vite.config.ts
+├── ARCHITECTURE.md           # Detailed system design
+└── README.md                 # Project overview
+```
+
+## Installation
+
+Ensure you have Node.js (v18 or higher) installed on your system.
 
 ### 1. Setup Backend
+
+Navigate to the backend directory, install dependencies, compile the TypeScript source, and start the server.
+
 ```bash
 cd backend
 npm install
 npm run build
 npm start
 ```
-*Backend runs on http://localhost:5001*
+The backend server will run on `http://localhost:5001`.
 
 ### 2. Setup Frontend
+
+Open a new terminal window. Navigate to the frontend directory, install dependencies, and start the development server.
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-*Frontend runs on http://localhost:5173*
+The frontend application will run on `http://localhost:5173`.
 
-### 3. Analyze a Repository
-1. Open the Frontend UI in your browser.
-2. In the top search bar, enter the **Absolute Path** to any local Git repository on your machine.
+## Running Locally
+
+1. Open a web browser and navigate to `http://localhost:5173`.
+2. In the top navigation bar, enter the absolute path to a local Git repository on your machine.
 3. Click **Analyze**.
-4. Use the Tabs to switch between the Code Viewer, Architecture Graph, and Git Timeline.
+4. Use the tab switcher to navigate between the **Code Viewer**, **Architecture Graph**, and **Git Timeline**.
 
-## 🧠 Future Roadmap
+## API Overview
 
-- **WebAssembly Engine**: Moving the entire backend Git parsing logic into WASM to allow the app to run completely offline in the browser without a Node server.
-- **Semantic Analysis**: Integrating local LLMs to automatically cluster related files into "Bounded Contexts" based on variable naming conventions.
-- **Electron Packaging**: Wrapping the monolithic engine into a 1-click executable application for macOS/Windows.
+The backend exposes the following REST endpoints:
 
----
-*Developed as a showcase of Advanced Architectural Design, Full-Stack Typescript, and Complex Data Visualization.*
+- `POST /api/v1/repository/analyze`: Initiates scanning of the provided repository path.
+- `GET /api/v1/repository/files`: Returns a flat array of file models.
+- `GET /api/v1/repository/dependencies`: Returns nodes and edges representing AST imports.
+- `GET /api/v1/repository/git`: Returns nodes and edges representing the Git commit history.
+- `GET /api/v1/repository/statistics`: Returns numerical metrics (total files, commits, predominant language).
+- `GET /api/v1/repository/file-content?path=<string>`: Returns the raw text content of a specified file.
+
+## Design Decisions
+
+- **In-Memory Caching**: To prioritize response times when switching between frontend views, the backend caches the unified repository model in memory rather than writing it to a persistent database.
+- **WASM Parsing**: `@swc/core` was selected over Babel for AST generation due to its Rust-based execution speed, which is necessary for parsing large repositories efficiently.
+- **Frontend Graph Layout**: The backend returns raw topological relationships. The frontend calculates X/Y spatial coordinates using `dagre` prior to rendering with React Flow. This separates data processing from presentation logic.
+
+## Limitations
+
+- **Memory Constraints**: Repositories with high file counts (e.g., >10,000 files) may exceed the Node.js V8 heap limit during the AST parsing phase.
+- **Layout Blocking**: The `dagre` layout algorithm executes synchronously on the main frontend thread. Large graphs may cause a brief UI freeze during calculation.
+- **Language Support**: AST dependency parsing is currently limited to TypeScript and JavaScript (`.ts`, `.tsx`, `.js`, `.jsx`).
+
+## Roadmap
+
+- **Web Worker Integration**: Offload `dagre` layout calculations to a background Web Worker to prevent UI blocking.
+- **Expanded Language Support**: Add AST parsing engines for Python and Go.
+- **Desktop Application Packaging**: Bundle the backend and frontend into an Electron or Tauri executable to simplify installation.
+
+## License
+
+MIT License
