@@ -165,7 +165,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
 
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        console.log('Fetch aborted');
+        // Fetch aborted
       } else {
         set({ error: err.message });
       }
