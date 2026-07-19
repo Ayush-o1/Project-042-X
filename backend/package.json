@@ -7,7 +7,7 @@
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run src/"
   },
   "keywords": [],
   "author": "",
@@ -15,12 +15,14 @@
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^7.8.0",
+    "@swc/core": "^1.15.43",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.1.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "ignore": "^7.0.6",
+    "p-limit": "^7.3.0",
     "simple-git": "^3.36.0",
     "typescript": "^5.9.3"
   },
