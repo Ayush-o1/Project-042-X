@@ -14,66 +14,58 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+    <header className="flex-between" style={{
       padding: '0 20px',
-      backgroundColor: 'var(--bg-secondary)',
-      borderBottom: '1px solid var(--border)'
+      height: '60px',
+      backgroundColor: 'var(--bg-app)',
+      borderBottom: '1px solid var(--border-default)'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <FolderGit2 size={24} color="var(--accent)" />
-        <h1 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Project 042-X</h1>
+      <div className="flex-center" style={{ gap: '10px' }}>
+        <FolderGit2 size={20} color="var(--accent-blue)" />
+        <h1 className="text-base" style={{ fontWeight: 600 }}>Project 042-X</h1>
       </div>
 
-      <form onSubmit={handleAnalyze} style={{ display: 'flex', gap: '10px', width: '400px' }}>
+      <form onSubmit={handleAnalyze} className="flex-center" style={{ gap: '8px', width: '400px' }}>
         <div style={{ position: 'relative', flex: 1 }}>
-          <Search size={16} color="var(--text-secondary)" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+          <Search size={14} color="var(--text-secondary)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
           <input 
             type="text" 
             placeholder="Absolute Repository Path..."
             value={path}
             onChange={(e) => setPath(e.target.value)}
             disabled={isAnalyzing}
+            className="text-sm"
             style={{
               width: '100%',
-              padding: '8px 10px 8px 34px',
-              backgroundColor: 'var(--bg-tertiary)',
+              padding: '8px 12px 8px 32px',
+              backgroundColor: 'var(--bg-surface)',
               color: 'var(--text-primary)',
               borderRadius: '6px',
-              fontSize: '14px',
-              transition: 'all 0.2s'
+              border: '1px solid var(--border-subtle)',
+              transition: 'border-color 150ms ease, background-color 150ms ease'
             }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--border-focus)'; e.currentTarget.style.backgroundColor = 'var(--bg-hover)'; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.backgroundColor = 'var(--bg-surface)'; }}
           />
         </div>
         <button 
           type="submit" 
           disabled={isAnalyzing || !path.trim()}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '0 16px',
-            backgroundColor: 'var(--accent)',
-            color: 'white',
-            borderRadius: '6px',
-            fontWeight: 500,
-            cursor: isAnalyzing ? 'not-allowed' : 'pointer',
-            opacity: isAnalyzing || !path.trim() ? 0.7 : 1
-          }}
+          className="btn-primary"
         >
-          <Play size={16} />
+          <Play size={14} />
           {isAnalyzing ? 'Analyzing...' : 'Analyze'}
         </button>
       </form>
 
-      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', gap: '20px' }}>
+      <div className="flex-center text-xs" style={{ color: 'var(--text-tertiary)', gap: '16px' }}>
         {metadata && (
           <>
-            <span>{metadata.statistics.totalFiles} Files</span>
-            <span>{metadata.statistics.totalCommits} Commits</span>
-            <span>{metadata.statistics.predominantLanguage}</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{metadata.statistics.totalFiles} Files</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{metadata.statistics.totalCommits} Commits</span>
+            <span style={{ color: 'var(--text-secondary)', padding: '2px 6px', backgroundColor: 'var(--bg-surface)', borderRadius: '4px' }}>
+              {metadata.statistics.predominantLanguage}
+            </span>
           </>
         )}
       </div>

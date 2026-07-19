@@ -17,48 +17,91 @@ export const AppShell: React.FC = () => {
       <div style={{ display: 'flex', overflow: 'hidden' }}>
         <Sidebar />
         
-        <main style={{ flex: 1, backgroundColor: 'var(--bg-primary)', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <main style={{ flex: 1, backgroundColor: 'var(--bg-app)', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
-            <button 
-              onClick={() => setActiveTab('code')}
-              style={{ padding: '8px 16px', background: activeTab === 'code' ? 'var(--bg-primary)' : 'transparent', color: activeTab === 'code' ? 'var(--accent)' : 'var(--text-secondary)', borderBottom: activeTab === 'code' ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer' }}
-            >
-              Code Viewer
-            </button>
-            <button 
-              onClick={() => setActiveTab('dependencies')}
-              style={{ padding: '8px 16px', background: activeTab === 'dependencies' ? 'var(--bg-primary)' : 'transparent', color: activeTab === 'dependencies' ? 'var(--accent)' : 'var(--text-secondary)', borderBottom: activeTab === 'dependencies' ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer' }}
-            >
-              Architecture Graph
-            </button>
-            <button 
-              onClick={() => setActiveTab('git')}
-              style={{ padding: '8px 16px', background: activeTab === 'git' ? 'var(--bg-primary)' : 'transparent', color: activeTab === 'git' ? 'var(--accent)' : 'var(--text-secondary)', borderBottom: activeTab === 'git' ? '2px solid var(--accent)' : '2px solid transparent', cursor: 'pointer' }}
-            >
-              Git Timeline
-            </button>
+          <div className="flex-center" style={{ 
+            padding: '12px 20px', 
+            backgroundColor: 'var(--bg-panel)',
+            borderBottom: '1px solid var(--border-default)' 
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              backgroundColor: 'var(--bg-app)', 
+              padding: '4px', 
+              borderRadius: '8px',
+              border: '1px solid var(--border-subtle)'
+            }}>
+              <button 
+                onClick={() => setActiveTab('code')}
+                className="text-sm"
+                style={{ 
+                  padding: '6px 16px', 
+                  borderRadius: '6px',
+                  background: activeTab === 'code' ? 'var(--bg-active)' : 'transparent', 
+                  color: activeTab === 'code' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontWeight: activeTab === 'code' ? 500 : 400,
+                  cursor: 'pointer',
+                  transition: 'all 150ms ease-out'
+                }}
+              >
+                Code Viewer
+              </button>
+              <button 
+                onClick={() => setActiveTab('dependencies')}
+                className="text-sm"
+                style={{ 
+                  padding: '6px 16px', 
+                  borderRadius: '6px',
+                  background: activeTab === 'dependencies' ? 'var(--bg-active)' : 'transparent', 
+                  color: activeTab === 'dependencies' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontWeight: activeTab === 'dependencies' ? 500 : 400,
+                  cursor: 'pointer',
+                  transition: 'all 150ms ease-out'
+                }}
+              >
+                Architecture Graph
+              </button>
+              <button 
+                onClick={() => setActiveTab('git')}
+                className="text-sm"
+                style={{ 
+                  padding: '6px 16px', 
+                  borderRadius: '6px',
+                  background: activeTab === 'git' ? 'var(--bg-active)' : 'transparent', 
+                  color: activeTab === 'git' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  fontWeight: activeTab === 'git' ? 500 : 400,
+                  cursor: 'pointer',
+                  transition: 'all 150ms ease-out'
+                }}
+              >
+                Git Timeline
+              </button>
+            </div>
           </div>
 
           <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
             {!metadata && !isAnalyzing && !error && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
-                <LayoutDashboard size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-                <h2 style={{ color: 'var(--text-primary)', marginBottom: '8px' }}>No Repository Loaded</h2>
-                <p style={{ fontSize: '14px' }}>Enter an absolute path to a local Git repository in the top bar to begin.</p>
+                <div style={{ padding: '24px', backgroundColor: 'var(--bg-surface)', borderRadius: '16px', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+                  <LayoutDashboard size={48} style={{ marginBottom: '16px', opacity: 0.5, color: 'var(--text-secondary)' }} />
+                  <h2 className="text-lg" style={{ color: 'var(--text-primary)', marginBottom: '8px', fontWeight: 500 }}>No Repository Loaded</h2>
+                  <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Enter an absolute path in the top bar to begin analysis.</p>
+                </div>
               </div>
             )}
 
             {isAnalyzing ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
-                <Loader2 size={32} className="animate-spin" style={{ marginBottom: '16px', color: 'var(--accent)' }} />
-                <p>Analyzing Repository Architecture...</p>
+                <Loader2 size={24} className="animate-spin" style={{ marginBottom: '12px', color: 'var(--accent-blue)' }} />
+                <p className="text-sm">Analyzing Architecture...</p>
               </div>
             ) : error ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--danger)' }}>
-                <AlertCircle size={48} style={{ marginBottom: '16px' }} />
-                <p style={{ fontWeight: 500, marginBottom: '4px' }}>Analysis Failed</p>
-                <p style={{ fontSize: '13px', opacity: 0.8 }}>{error}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--color-danger)' }}>
+                <div style={{ padding: '24px', backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <AlertCircle size={32} style={{ marginBottom: '12px' }} />
+                  <p className="text-base" style={{ fontWeight: 500, marginBottom: '4px' }}>Analysis Failed</p>
+                  <p className="text-sm" style={{ opacity: 0.8 }}>{error}</p>
+                </div>
               </div>
             ) : metadata ? (
               <>

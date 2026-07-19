@@ -6,7 +6,7 @@ export const CodeViewer: React.FC = () => {
 
   if (!activeFile) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
+      <div className="flex-center text-sm" style={{ height: '100%', color: 'var(--text-tertiary)' }}>
         Select a file to view its content
       </div>
     );
@@ -15,31 +15,28 @@ export const CodeViewer: React.FC = () => {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ 
-        padding: '10px 20px', 
-        borderBottom: '1px solid var(--border)', 
-        backgroundColor: 'var(--bg-primary)',
-        fontSize: '13px',
+        padding: '12px 20px', 
+        borderBottom: '1px solid var(--border-default)', 
+        backgroundColor: 'var(--bg-app)',
         color: 'var(--text-secondary)',
         display: 'flex',
         alignItems: 'center',
-        gap: '10px'
-      }}>
-        <span>{activeFile.path}</span>
-        <span style={{ backgroundColor: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px' }}>
+        gap: '12px'
+      }} className="text-sm">
+        <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{activeFile.path}</span>
+        <span style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' }}>
           {(activeFile.size / 1024).toFixed(1)} KB
         </span>
       </div>
       
-      <div style={{ flex: 1, overflow: 'auto', padding: '20px', backgroundColor: '#1e1e1e' }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: '24px', backgroundColor: 'var(--bg-app)' }}>
         {isFileLoading ? (
-          <div style={{ color: 'var(--text-secondary)' }}>Loading...</div>
+          <div className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Loading...</div>
         ) : (
           <pre style={{ margin: 0 }}>
-            <code style={{ 
-              fontFamily: '"Fira Code", "JetBrains Mono", monospace', 
-              fontSize: '13px',
-              lineHeight: 1.5,
-              color: '#d4d4d4'
+            <code className="font-mono text-sm" style={{ 
+              lineHeight: 1.6,
+              color: 'var(--text-secondary)'
             }}>
               {activeFileContent}
             </code>

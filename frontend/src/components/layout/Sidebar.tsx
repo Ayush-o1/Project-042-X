@@ -51,20 +51,20 @@ export const Sidebar: React.FC = () => {
   return (
     <aside style={{
       width: '300px',
-      backgroundColor: 'var(--bg-secondary)',
-      borderRight: '1px solid var(--border)',
+      backgroundColor: 'var(--bg-panel)',
+      borderRight: '1px solid var(--border-default)',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden'
     }}>
-      <div style={{ padding: '12px 20px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>
+      <div className="text-xs" style={{ padding: '16px 20px 8px 20px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.05em' }}>
         Explorer
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 10px 20px 10px' }}>
         {fileTree ? (
           <FileTree node={fileTree} depth={0} />
         ) : (
-          <div style={{ padding: '20px', color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center' }}>
+          <div className="text-sm" style={{ padding: '20px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
             No repository loaded.
           </div>
         )}

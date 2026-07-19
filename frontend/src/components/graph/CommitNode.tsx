@@ -3,33 +3,39 @@ import { GitCommit, GitBranch, Tag } from 'lucide-react';
 
 export const CommitNode = ({ data, selected }: { data: any, selected?: boolean }) => {
   return (
-    <div style={{
+    <div 
+      className="glass-panel"
+      style={{
       padding: '12px 16px',
-      borderRadius: '8px',
-      backgroundColor: 'var(--bg-secondary)',
-      border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
-      boxShadow: selected ? '0 0 0 1px var(--accent)' : 'none',
+      backgroundColor: selected ? 'var(--bg-active)' : 'var(--bg-surface)',
+      border: `1px solid ${selected ? 'var(--accent-blue)' : 'var(--border-default)'}`,
+      boxShadow: selected ? '0 0 0 1px var(--accent-blue), 0 4px 6px -1px rgba(0,0,0,0.5)' : '0 4px 6px -1px rgba(0,0,0,0.5)',
       width: '300px',
       color: 'var(--text-primary)',
-    }}>
-      <Handle type="target" position={Position.Top} style={{ background: 'var(--border)' }} />
+      transition: 'transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease',
+      transform: selected ? 'scale(1.02)' : 'scale(1)',
+    }}
+      onMouseEnter={(e) => { if(!selected) e.currentTarget.style.transform = 'scale(1.02)'; }}
+      onMouseLeave={(e) => { if(!selected) e.currentTarget.style.transform = 'scale(1)'; }}
+    >
+      <Handle type="target" position={Position.Top} style={{ background: 'var(--border-focus)', border: 'none' }} />
       
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
+      <div className="flex-between" style={{ alignItems: 'flex-start', marginBottom: '8px' }}>
+        <div className="flex-center" style={{ gap: '6px', color: 'var(--text-secondary)' }}>
           <GitCommit size={14} />
-          <span style={{ fontSize: '11px', fontFamily: 'monospace' }}>{data.hash.substring(0, 7)}</span>
+          <span className="font-mono text-xs">{data.hash.substring(0, 7)}</span>
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+        <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
           {new Date(data.timestamp).toLocaleDateString()}
         </div>
       </div>
 
-      <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div className="text-sm" style={{ fontWeight: 500, marginBottom: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {data.message}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{data.author}</span>
+      <div className="flex-between">
+        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{data.author}</span>
         
         <div style={{ display: 'flex', gap: '4px' }}>
           {data.refs.map((ref: string, idx: number) => {
@@ -38,12 +44,13 @@ export const CommitNode = ({ data, selected }: { data: any, selected?: boolean }
             if (label === 'HEAD') return null;
 
             return (
-              <span key={idx} style={{ 
-                display: 'flex', alignItems: 'center', gap: '2px',
-                padding: '2px 6px', borderRadius: '4px', fontSize: '10px', 
-                backgroundColor: isTag ? '#10b98120' : '#3b82f620',
-                color: isTag ? '#10b981' : '#3b82f6',
-                border: `1px solid ${isTag ? '#10b98140' : '#3b82f640'}`
+              <span key={idx} className="flex-center font-mono text-xs" style={{ 
+                gap: '4px',
+                padding: '2px 6px', 
+                borderRadius: '4px', 
+                backgroundColor: isTag ? 'var(--color-success)' : 'var(--accent-blue-bg)',
+                color: isTag ? '#fff' : 'var(--accent-blue)',
+                border: `1px solid ${isTag ? 'var(--color-success)' : 'var(--border-default)'}`
               }}>
                 {isTag ? <Tag size={10} /> : <GitBranch size={10} />}
                 {label}
@@ -53,7 +60,7 @@ export const CommitNode = ({ data, selected }: { data: any, selected?: boolean }
         </div>
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={{ background: 'var(--accent)' }} />
+      <Handle type="source" position={Position.Bottom} style={{ background: 'var(--accent-blue)', border: 'none' }} />
     </div>
   );
 };

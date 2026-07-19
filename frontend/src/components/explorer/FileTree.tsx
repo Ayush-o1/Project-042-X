@@ -12,10 +12,10 @@ export const FileTree: React.FC<{ node: any, depth: number }> = ({ node, depth }
     if (node.isDirectory) return isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />;
     
     const ext = node.file?.extension;
-    if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return <FileCode2 size={14} color="#3b82f6" />;
-    if (['.json', '.md'].includes(ext)) return <FileJson size={14} color="#10b981" />;
+    if (['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return <FileCode2 size={14} color="var(--accent-blue)" />;
+    if (['.json', '.md'].includes(ext)) return <FileJson size={14} color="var(--color-success)" />;
     if (['.png', '.jpg', '.svg'].includes(ext)) return <ImageIcon size={14} color="#8b5cf6" />;
-    return <File size={14} color="var(--text-secondary)" />;
+    return <File size={14} color="var(--text-tertiary)" />;
   };
 
   const handleToggle = () => {
@@ -37,18 +37,19 @@ export const FileTree: React.FC<{ node: any, depth: number }> = ({ node, depth }
         style={{ 
           display: 'flex', 
           alignItems: 'center', 
-          gap: '6px', 
-          padding: '4px 8px',
-          paddingLeft: `${depth * 12 + 8}px`,
+          gap: '8px', 
+          padding: '6px 8px',
+          paddingLeft: `${depth * 14 + 10}px`,
           cursor: 'pointer',
-          borderRadius: '4px',
-          color: isSelected ? 'white' : 'var(--text-primary)',
-          backgroundColor: isSelected ? 'var(--accent)' : 'transparent',
+          borderRadius: '6px',
+          color: isSelected ? 'var(--accent-blue)' : 'var(--text-secondary)',
+          backgroundColor: isSelected ? 'var(--accent-blue-bg)' : 'transparent',
           fontSize: '13px',
-          userSelect: 'none'
+          userSelect: 'none',
+          transition: 'background-color 150ms ease, color 150ms ease'
         }}
         onMouseEnter={(e) => {
-          if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+          if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
         }}
         onMouseLeave={(e) => {
           if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
