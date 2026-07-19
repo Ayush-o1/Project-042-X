@@ -1,17 +1,21 @@
 import { create } from 'zustand';
-import type { FileModel, RepositoryMetadata } from '../types';
+import type { FileModel, RepositoryMetadata, DependencyGraphData, GitGraphData } from '../types';
 
 interface RepositoryState {
   isAnalyzing: boolean;
   error: string | null;
   metadata: RepositoryMetadata | null;
   files: FileModel[];
+  dependencies: DependencyGraphData | null;
+  git: GitGraphData | null;
   activeFile: FileModel | null;
   activeFileContent: string | null;
   isFileLoading: boolean;
+  activeTab: 'code' | 'dependencies' | 'git';
 
   analyze: (path: string) => Promise<void>;
   setActiveFile: (file: FileModel) => Promise<void>;
+  setActiveTab: (tab: 'code' | 'dependencies' | 'git') => void;
 }
 
 export const useRepositoryStore = create<RepositoryState>((set) => ({
@@ -19,9 +23,12 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
   error: null,
   metadata: null,
   files: [],
+  dependencies: null,
+  git: null,
   activeFile: null,
   activeFileContent: null,
   isFileLoading: false,
+  activeTab: 'code',
 
   analyze: async (path: string) => {
     set({ isAnalyzing: true, error: null });
@@ -39,12 +46,20 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
 
       set({ metadata: data.data });
 
-      // After successful analysis, immediately fetch files
-      const filesRes = await fetch('http://localhost:5001/api/v1/repository/files');
+      // Fetch files, dependencies, and git natively
+      const [filesRes, depRes, gitRes] = await Promise.all([
+        fetch('http://localhost:5001/api/v1/repository/files'),
+        fetch('http://localhost:5001/api/v1/repository/dependencies'),
+        fetch('http://localhost:5001/api/v1/repository/git')
+      ]);
+      
       const filesData = await filesRes.json();
-      if (filesData.success) {
-        set({ files: filesData.data });
-      }
+      const depData = await depRes.json();
+      const gitData = await gitRes.json();
+      
+      if (filesData.success) set({ files: filesData.data });
+      if (depData.success) set({ dependencies: depData.data });
+      if (gitData.success) set({ git: gitData.data });
 
     } catch (err: any) {
       set({ error: err.message });
@@ -56,7 +71,7 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
   setActiveFile: async (file: FileModel) => {
     if (file.isDirectory) return;
 
-    set({ activeFile: file, isFileLoading: true, error: null });
+    set({ activeFile: file, isFileLoading: true, error: null, activeTab: 'code' });
     try {
       const res = await fetch(`http://localhost:5001/api/v1/repository/file-content?path=${encodeURIComponent(file.path)}`);
       const data = await res.json();
@@ -67,5 +82,9 @@ export const useRepositoryStore = create<RepositoryState>((set) => ({
     } finally {
       set({ isFileLoading: false });
     }
+  },
+
+  setActiveTab: (tab: 'code' | 'dependencies' | 'git') => {
+    set({ activeTab: tab });
   }
 }));

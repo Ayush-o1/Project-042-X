@@ -21,3 +21,35 @@ export interface RepositoryMetadata {
   name: string;
   statistics: RepositoryStatistics;
 }
+
+export interface GraphNode {
+  id: string; // Absolute path
+  path: string; // Absolute path
+  name: string;
+  type: string;
+}
+
+export interface GraphEdge {
+  sourceId: string;
+  targetId: string;
+  type: string; // e.g. 'import'
+}
+
+export interface DependencyGraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface GitCommitNode {
+  hash: string;
+  parents: string[];
+  author: string;
+  timestamp: string;
+  message: string;
+  refs: string[];
+}
+
+export interface GitGraphData {
+  head: string | null;
+  commits: GitCommitNode[];
+}
