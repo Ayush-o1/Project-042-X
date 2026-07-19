@@ -50,3 +50,19 @@ button, input {
   outline: none;
   border: none;
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.glass-panel {
+  background: rgba(23, 23, 23, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
