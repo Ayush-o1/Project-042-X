@@ -15,6 +15,26 @@ It processes local Git repositories and generates interactive, two-dimensional m
 - **Interactive Visualization**: Renders graphs on an interactive canvas supporting panning, zooming, and node selection.
 - **Integrated Code Viewer**: Links architecture nodes to the physical file system, allowing users to view the raw source code of selected files without leaving the context of the graph.
 
+## Screenshots
+
+### Landing Page
+![Landing Page](docs/images/landing_page.png)
+
+### Repository Explorer & Code Viewer
+![Code Viewer](docs/images/code_viewer.png)
+
+### Dependency Graph (Architecture View)
+![Dependency Graph](docs/images/dependency_graph.png)
+
+### Git Timeline
+![Git Timeline](docs/images/git_timeline.png)
+
+### Insights Dashboard
+![Insights Dashboard](docs/images/insights_dashboard.png)
+
+### Export Features & Session History
+![Session History](docs/images/session_history.png)
+
 ## Documentation
 
 - [Architecture Overview](docs/ARCHITECTURE.md)
