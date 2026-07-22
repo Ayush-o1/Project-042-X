@@ -20,9 +20,9 @@ Performs a recursive, depth-first traversal of the specified filesystem path.
 
 ### 2. AST Engine
 Responsible for semantic code understanding.
-- Utilizes `@swc/core` (Rust-based) to compile and parse TypeScript and JavaScript files into Abstract Syntax Trees (AST).
-- A custom `PathResolver` traverses the AST to extract ES6 `import` and `export` statements.
-- Transforms relative import paths into absolute workspace paths to build a deterministic static dependency graph.
+- Utilizes `@swc/core` (Rust-based) to parse TypeScript and JavaScript files into Abstract Syntax Trees (AST).
+- The `SwcParser` walks the AST to extract ES module `import` and `export` statements (including dynamic imports and re-exports).
+- A `PathResolver` transforms relative import specifiers into absolute workspace paths (probing extensions and `index.*` files) to build a deterministic static dependency graph. Bare-module imports (`react`, `express`) and tsconfig path aliases are not resolved.
 
 ### 3. Git Engine
 Extracts version control metadata using a `simple-git` wrapper.
@@ -34,7 +34,7 @@ Extracts version control metadata using a `simple-git` wrapper.
 
 ## Frontend Engine
 
-The frontend is built with React 18, Vite, and Zustand. It receives the raw `UnifiedRepositoryModel` and computes the presentation layer.
+The frontend is built with React 19, Vite, and Zustand. It receives the raw analysis data and computes the presentation layer.
 
 ### 1. State Management (Zustand)
 The `useRepositoryStore` acts as the single source of truth.
@@ -53,7 +53,7 @@ A purely mathematical module that calculates derived metrics from the dependency
 Separates topological data from spatial data.
 - The backend provides nodes and edges without X/Y coordinates.
 - The frontend uses `dagre` to execute a directed graph layout algorithm (Top-to-Bottom for Git, Left-to-Right for Dependencies).
-- Coordinates are passed to `@xyflow/react` which handles canvas interactions, zooming, panning, and viewport virtualization.
+- Coordinates are passed to `@xyflow/react` (React Flow), which renders nodes as DOM elements and edges as SVG, and handles zooming, panning, and viewport virtualization.
 
 ### 4. Export & Session Engine
 Provides zero-configuration persistence.
@@ -66,13 +66,12 @@ Provides zero-configuration persistence.
 
 1. **Initialization**: User submits an absolute filesystem path in the UI.
 2. **Analysis Request**: Frontend issues a `POST /api/v1/repository/analyze` request.
-3. **Backend Orchestration**: `RepositoryIntelligenceEngine` invokes the Scanner, AST, and Git engines synchronously.
-4. **Data Unification**: Results are merged into a `UnifiedRepositoryModel`.
-5. **Streaming Transfer**: To prevent UI locking, the frontend requests files, dependencies, and git data sequentially via incremental `GET` requests.
-6. **Normalization**: `useRepositoryStore` normalizes the incoming data (e.g., mapping backend date objects to standardized timestamp strings).
-7. **Metric Computation**: `computeInsights` calculates Tarjan's SCC and DFS metrics.
-8. **Layout Calculation**: `getDagreLayout` computes X/Y coordinates for the graph nodes.
-9. **Rendering**: React Flow paints the virtualized nodes onto the WebGL canvas.
+3. **Backend Orchestration**: `RepositoryIntelligenceEngine` runs the Scanner→AST pipeline and the Git engine as concurrent async operations, then merges the results into a `UnifiedRepositoryModel` held in memory. The API serves one analyzed repository at a time; a new analysis replaces the previous one.
+4. **Staged Transfer**: The frontend then fetches files, dependencies, and git data via three sequential `GET` requests so the UI can populate incrementally.
+5. **Normalization**: `useRepositoryStore` normalizes the incoming payloads into frontend models (e.g., serialized dates to timestamp strings).
+6. **Metric Computation**: `computeInsights` calculates Tarjan's SCC, memoized-DFS depth, coupling, and health metrics.
+7. **Layout Calculation**: `getDagreLayout` computes X/Y coordinates for the graph nodes.
+8. **Rendering**: React Flow renders the nodes (DOM) and edges (SVG), virtualizing offscreen elements.
 
 ---
 

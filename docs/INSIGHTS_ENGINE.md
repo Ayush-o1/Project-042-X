@@ -11,10 +11,10 @@ The `GitIntelligenceEngine` in the backend was extended with a `--name-only` log
 
 ### Frontend Responsibilities
 The `insightsEngine.ts` file acts as the algorithmic core. When the `useRepositoryStore` state updates, the engine recalculates:
-1. **Graph Metrics**: Using the D3/Dagre graph nodes/edges to construct an adjacency matrix. It runs Tarjan's SCC to detect cycles and DFS for depth calculations.
+1. **Graph Metrics**: Builds adjacency lists from the dependency nodes/edges, runs Tarjan's SCC to detect cycles, and memoized DFS for maximum-depth calculations. Coupling metrics (orphans, average fan-in, graph density) are computed over parseable source files only, since only those can carry edges.
 2. **Git Aggregations**: Grouping `--name-only` arrays across all commits to find the absolute most active files (churn hotspots).
-3. **File System Aggregations**: Summing file sizes grouped by their nested directory paths to discover the largest sub-modules.
+3. **File System Aggregations**: Summing file sizes grouped by repo-relative directory paths to discover the largest sub-modules.
 
 ## Performance Considerations
 - **In-Memory Graphs**: Graph traversal is extremely fast (milliseconds for thousands of nodes) since it's operating on raw Javascript objects, not DOM nodes.
-- **Lazy Evaluation**: The engine only computes insights when the "Insights" tab is loaded, saving main-thread blocking time during initial load.
+- **Memoized Evaluation**: Consumers (the Insights dashboard and the Architecture graph overlays) compute insights inside `useMemo`, so the engine only re-runs when the underlying repository data changes.

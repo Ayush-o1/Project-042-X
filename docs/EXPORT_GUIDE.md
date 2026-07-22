@@ -9,7 +9,7 @@ Because repositories contain massive dependency ASTs and Git history, re-analyzi
 - **Session History**: Click the clock icon. Here you can load any previously saved session instantly. You can also export sessions to disk as raw JSON files and import them later or share them with teammates.
 
 ## Exporting Architecture Graphs
-You can export the currently active React Flow / Dagre graph to an image.
+You can export the dependency graph to an image. The **Architecture tab must be open**: the export captures the graph as it is currently rendered on screen, so frame the view (e.g. Fit View) before exporting.
 - **PNG**: Best for quickly pasting into Slack or presentations. Uses a high-density pixel ratio to avoid blurring.
 - **SVG**: Best for printing or zooming in infinitely without loss of resolution.
 
@@ -21,4 +21,4 @@ Click the download icon (`Export`) and choose:
 
 ## Snapshot Comparison
 To track architecture drift over time, save a session on branch A. Switch to branch B, run an analysis, and save another session. Click the `Compare` icon (two diverging arrows).
-Select the two sessions to instantly calculate the absolute drift in metrics like Cyclomatic Complexity, Max Depth, and total Fan-In.
+Select the two sessions to calculate the drift in metrics: total files, total commits, dependency edges, circular dependencies, orphan files, average fan-in, and maximum dependency depth.

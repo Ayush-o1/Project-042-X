@@ -1,0 +1,18 @@
+{
+  "name": "project-042x",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Local-first repository intelligence: dependency graphs, git history analysis, and architecture insights for local Git repositories.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "install:all": "npm install --prefix backend && npm install --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix backend && npm run build --prefix frontend",
+    "test": "npm test --prefix backend",
+    "typecheck": "npx --prefix backend tsc --noEmit -p backend && npx --prefix frontend tsc -b frontend"
+  }
+}

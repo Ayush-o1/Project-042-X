@@ -2,26 +2,26 @@
 
 ## Project Overview
 
-Project 042-X is a high-performance repository intelligence engine designed to analyze, visualize, and extract actionable insights from large-scale codebases. It provides a real-time, interactive dependency graph, tracks architectural evolution through Git timeline integration, and calculates complex structural metrics like circular dependencies and component fan-in. 
+Project 042-X is a local-first repository intelligence tool. It analyzes local Git repositories, builds an AST-derived dependency graph, parses the full commit history, and computes deterministic architecture metrics — circular dependencies, coupling, hotspots, and module health — entirely on your machine. No data ever leaves your computer.
 
-Built with performance in mind, it analyzes ASTs natively using SWC and calculates graph spatial coordinates via Dagre, delivering a seamless experience even on enterprise-grade repositories.
+Parsing uses SWC (Rust-based) for speed; graph layout is computed with Dagre and rendered interactively with React Flow.
 
 ## Key Features
 
-- **AST-Driven Architecture Graph**: Accurately maps ES6 imports/exports into an interactive topological dependency graph.
-- **Git Timeline Integration**: Visualizes commit history, branch topologies, and tracks file modification hotspots over the lifetime of the repository.
-- **Insights Dashboard**: Calculates and flags circular dependencies, orphaned files, maximum dependency chains, and component fan-in.
-- **Integrated Code Viewer**: Navigate directly from architectural nodes to the physical file system to inspect raw source code.
-- **Zero-Configuration Persistence**: Saves repository snapshots seamlessly to the browser's IndexedDB, bypassing standard local storage limits.
-- **Comprehensive Export Engine**: Export architectural snapshots to PDF, Markdown, JSON, SVG, and high-resolution PNG.
+- **AST-Driven Architecture Graph**: Maps ES module imports/exports into an interactive dependency graph with folder clustering, filters, and a per-node inspector.
+- **Git Timeline**: Visualizes commit history and branch/merge topology, with author and date filtering.
+- **Insights Dashboard**: Deterministic metrics — circular dependencies (Tarjan's SCC), orphaned source files, longest dependency chains, fan-in/fan-out, instability, and per-module health scores.
+- **Integrated Code Viewer**: Jump from any graph node straight to syntax-highlighted source.
+- **Session Persistence**: Snapshot an analysis to the browser's IndexedDB and restore it instantly, plus JSON export/import and snapshot comparison.
+- **Export Engine**: PDF, Markdown, and JSON reports; PNG/SVG captures of the graph view.
 
 ## Architecture Overview
 
-Project 042-X operates on a localized Backend-for-Frontend (BFF) architecture. 
+Project 042-X runs as two local processes:
 
-The **Node.js Backend** acts as a high-speed data processing pipeline. It utilizes `@swc/core` for native AST parsing and `simple-git` for version control extraction. It operates entirely in memory, streaming calculated data directly to the frontend without requiring an external database.
+The **Node.js backend** is a data-processing pipeline: it scans the filesystem (respecting `.gitignore`), parses TypeScript/JavaScript ASTs with `@swc/core`, and reads git history via `simple-git`. Everything is held in memory — there is no database. The API binds to `127.0.0.1` only and rejects non-local origins and hosts.
 
-The **React Frontend** manages application state via Zustand. It utilizes `dagre` to perform mathematical graph layouts and `@xyflow/react` (React Flow) for high-performance rendering. Heavy analytical calculations (e.g., Tarjan's Strongly Connected Components algorithm for circular dependencies) are processed within the frontend's Insights Engine.
+The **React frontend** (Zustand for state) fetches the analysis in stages, computes derived metrics in its Insights Engine (Tarjan's SCC, memoized DFS), lays out graphs with `dagre`, and renders them with `@xyflow/react` (React Flow, SVG/DOM-based).
 
 ## Screenshots
 
@@ -48,59 +48,40 @@ The **React Frontend** manages application state via Zustand. It utilizes `dagre
 
 ## Installation
 
-Ensure you have Node.js (v18 or higher) installed on your system.
-
-### 1. Setup Backend
-
-Navigate to the backend directory, install dependencies, compile the TypeScript source, and start the server.
+Requires **Node.js 20.19+**.
 
 ```bash
-cd backend
-npm install
-npm run build
-npm start
+# From the repository root
+npm run install:all
+
+# Terminal 1 — backend (http://127.0.0.1:5001)
+npm run dev:backend
+
+# Terminal 2 — frontend (http://localhost:5173)
+npm run dev:frontend
 ```
-The backend server will run on `http://localhost:5001` (or your configured port). Ensure you have an `.env` file populated based on `.env.example`.
 
-### 2. Setup Frontend
+No `.env` files are required — sensible defaults are built in. To change the backend port or CORS allowlist, copy the values from [.env.example](.env.example) into `backend/.env` and `frontend/.env`.
 
-Open a new terminal window. Navigate to the frontend directory, install dependencies, and start the application.
-
-```bash
-cd frontend
-npm install
-npm run build
-npm run preview
-```
-The frontend application will run on `http://localhost:4173`. For development, use `npm run dev` to start the Vite HMR server on port `5173` or `5174`.
+For a production-style build: `npm run build`, then `npm start --prefix backend` and `npm run preview --prefix frontend`.
 
 ## Quick Start
 
-1. Start both the backend and frontend servers.
-2. Open the frontend URL in your web browser.
-3. In the top navigation bar, enter the **absolute path** to a local Git repository on your machine.
-4. Press **Enter** to trigger the analysis engine.
-5. Navigate through the **Code Viewer**, **Architecture Graph**, **Git Timeline**, and **Insights** tabs.
+1. Start both servers (above) and open the frontend URL.
+2. Enter the **absolute path** to a local Git repository in the top bar and press **Enter**.
+3. Explore the **Code**, **Architecture**, **Git Timeline**, and **Insights** tabs.
 
 ## Usage
 
-- **Navigation**: Click on any node within the Architecture Graph to open the Node Inspector, which provides a direct link to open the file in the Code Viewer.
-- **Search**: Use the Command Palette (`Cmd+K` or `Ctrl+K`) to quickly find and jump to specific files.
-- **Persistence**: Click the "Save Session" icon to dump the current analysis into IndexedDB for instant retrieval later via the Session History panel.
-- **Exporting**: Click the download icon to export the current view. Ensure the graph is positioned correctly before exporting to PNG or SVG.
-
-## Supported Features
-
-- Complete TypeScript and JavaScript AST parsing.
-- Detection of circular dependencies and orphaned (unreferenced) files.
-- Topological branch mapping and merge commit visualization.
-- Dark-mode optimized, glassmorphic UI design.
-- Local-first architecture (no data leaves your machine).
+- **Navigation**: Click any node in the Architecture Graph to open the Node Inspector, which links directly to the Code Viewer.
+- **Search**: Use the Command Palette (`Cmd+K` / `Ctrl+K`) to jump to any file.
+- **Persistence**: Press `Cmd+S` (or click **Save**) to snapshot the analysis into IndexedDB; restore it from **History**.
+- **Exporting**: Use the **Export** menu. PNG/SVG capture the currently visible Architecture graph, so open that tab and frame the view first.
 
 ## Technology Stack
 
-- **Frontend**: React 18, Vite, TypeScript, Zustand, React Flow (`@xyflow/react`), Dagre, `html-to-image`, `jspdf`, `idb-keyval`, Lucide React
-- **Backend**: Node.js, Express, TypeScript, SWC (`@swc/core`), `simple-git`, Zod
+- **Frontend**: React 19, Vite, TypeScript, Zustand, React Flow (`@xyflow/react`), Dagre, `highlight.js`, `html-to-image`, `jspdf`, `idb-keyval`, Lucide React
+- **Backend**: Node.js, Express 5, TypeScript, SWC (`@swc/core`), `simple-git`, Zod
 
 ## Project Structure
 
@@ -108,35 +89,49 @@ The frontend application will run on `http://localhost:4173`. For development, u
 Project 042-X/
 ├── backend/
 │   ├── src/
-│   │   ├── api/           # Express routes, controllers, and Zod validators
-│   │   └── core/          # AST, Git, and Scanner engines
+│   │   ├── api/           # Express routes, controllers, middlewares, Zod validators
+│   │   └── core/          # Scanner, AST, Git, and orchestration engines
 │   └── package.json
 ├── frontend/
 │   ├── src/
 │   │   ├── components/    # React components (Graph, Insights, Layout, Viewer)
-│   │   ├── lib/           # Core frontend engines (Insights, Export, Storage)
+│   │   ├── lib/           # Insights, Export, and Session engines
 │   │   └── store/         # Zustand state management
 │   └── package.json
-└── docs/                  # Architectural documentation and export specifications
+└── docs/                  # Metric definitions and export specifications
 ```
+
+## Security Model
+
+The backend reads local files on behalf of the frontend, so it is deliberately locked down:
+
+- Binds to `127.0.0.1` only (never reachable from the network).
+- Rejects requests whose `Host` header is not local (DNS-rebinding protection).
+- CORS restricted to localhost origins.
+- File content is only served for files discovered by the scanner, verified against the repository root via `realpath` (symlink-safe).
 
 ## Performance Notes
 
-- **Parsing Speed**: By leveraging SWC (Rust-based), AST generation is significantly faster than traditional JavaScript parsers (like Babel).
-- **Layout Calculation**: The `dagre` layout algorithm runs synchronously. For massive repositories (5000+ files), this may cause a brief UI thread pause.
-- **Rendering**: React Flow utilizes viewport virtualization. Ensure `fitView` is utilized when loading large graphs to prevent rendering off-screen elements unnecessarily.
+- **Parsing**: SWC (Rust-based) parses ASTs significantly faster than JavaScript-based parsers.
+- **Layout**: `dagre` runs synchronously on the main thread; very large graphs (thousands of nodes) cause a noticeable pause during layout.
+- **Rendering**: React Flow virtualizes offscreen nodes; the file explorer is virtualized with `react-virtuoso`.
 
 ## Known Limitations
 
-- The AST engine currently only resolves ES6 `import`/`export` syntax. CommonJS (`require`) is not fully supported for graph generation.
-- Repositories without a valid `.git` directory will fail the Git Timeline analysis phase.
-- File sizes and metrics are calculated based on disk usage; symbolic links are not traversed to prevent infinite loops.
+- The AST engine resolves ES module `import`/`export` syntax (plus `import x = require(...)`). Bare CommonJS `require()` calls are not extracted.
+- `tsconfig.json` path aliases (e.g. `@/components/...`) are not resolved, so alias imports do not appear as graph edges.
+- The backend analyzes one repository at a time; a new analysis replaces the previous one.
+- Git worktrees and submodules (where `.git` is a file, not a directory) are not supported.
+- Symbolic links are not followed during scanning.
+- Files larger than 5 MB are skipped.
+- The full commit history is loaded at once; extremely large histories (100k+ commits) will be slow.
 
 ## Future Improvements
 
-- Implementation of a WebWorker for off-thread `dagre` layout calculations to prevent UI blocking on extremely large codebases.
-- Support for Python, Go, and Java AST parsing via language server protocols.
-- Real-time file watching to incrementally update the graph upon local filesystem changes.
+- Web Worker for off-thread `dagre` layout on large graphs.
+- `tsconfig.json` path-alias and monorepo workspace resolution.
+- Commit-count capping with paged retrieval for very large histories.
+- Real-time file watching with incremental graph updates.
 
 ## License
 
