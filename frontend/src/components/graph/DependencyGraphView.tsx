@@ -12,11 +12,12 @@ import {
 import type { Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
+import { useShallow } from 'zustand/react/shallow';
 import { getDagreLayout } from './layoutUtils';
 import { FileNode } from './FileNode';
 import { FolderNode } from './FolderNode';
 import { CustomEdge } from './CustomEdge';
-import { computeInsights, deriveRepoRoot } from '../../lib/insightsEngine';
+import { deriveRepoRoot } from '../../lib/insightsEngine';
 import type { ModuleMetrics } from '../../lib/insightsEngine';
 import {
   Search, ZoomIn, ZoomOut, Maximize, X, ExternalLink, FileCode,
@@ -283,12 +284,17 @@ const HealthBadge: React.FC<{ score: number }> = ({ score }) => {
 
 // ─── Inspector Panel ───────────────────────────────────────────────────────────
 
+interface GraphAdjacency {
+  forward: Map<string, { target: string; edgeId: string }[]>;
+  reverse: Map<string, { source: string; edgeId: string }[]>;
+}
+
 const Inspector = ({
   node,
   onClose,
   onOpen,
   moduleMetrics,
-  dependencies,
+  adjacency,
   gitCommitMap,
   gitAuthorsMap,
   gitLastModifiedMap,
@@ -297,7 +303,7 @@ const Inspector = ({
   onClose: () => void;
   onOpen: (path: string) => void;
   moduleMetrics: Map<string, ModuleMetrics>;
-  dependencies: { nodes: any[]; edges: any[] } | null;
+  adjacency: GraphAdjacency;
   gitCommitMap: Map<string, number>;
   gitAuthorsMap: Map<string, string[]>;
   gitLastModifiedMap: Map<string, string>;
@@ -311,9 +317,10 @@ const Inspector = ({
 
   const metrics = moduleMetrics.get(path);
 
-  // Get list of dependencies and dependents from the edge data
-  const deps = dependencies?.edges.filter(e => e.sourceId === path || e.source === path).map(e => e.targetId || e.target) || [];
-  const dependents = dependencies?.edges.filter(e => e.targetId === path || e.target === path).map(e => e.sourceId || e.source) || [];
+  // O(degree) lookups via the prebuilt adjacency index instead of scanning
+  // every edge in the graph on each render.
+  const deps = (adjacency.forward.get(path) ?? []).map(e => e.target);
+  const dependents = (adjacency.reverse.get(path) ?? []).map(e => e.source);
 
   // Git data (all maps are keyed by absolute path)
   const commitCount = gitCommitMap.get(path) ?? metrics?.commitCount ?? 0;
@@ -543,7 +550,17 @@ const Inspector = ({
 const FlowWrapper: React.FC<{
   externalHighlight?: string | null;
 }> = ({ externalHighlight }) => {
-  const { dependencies, files, git, setActiveFile, clearGraphHighlight } = useRepositoryStore();
+  const { dependencies, files, git, insights, setActiveFile, clearGraphHighlight } =
+    useRepositoryStore(
+      useShallow(s => ({
+        dependencies: s.dependencies,
+        files: s.files,
+        git: s.git,
+        insights: s.insights,
+        setActiveFile: s.setActiveFile,
+        clearGraphHighlight: s.clearGraphHighlight,
+      })),
+    );
   const { setCenter } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -559,11 +576,32 @@ const FlowWrapper: React.FC<{
     fileTypeFilter: '',
   });
 
-  // ── Compute insights for overlay data ──────────────────────────────────────
-  const insights = useMemo(() => {
-    if (!dependencies) return null;
-    return computeInsights(files, dependencies, git);
-  }, [files, dependencies, git]);
+  // ── O(1) lookups, built once per dataset ───────────────────────────────────
+  const fileSizeMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const f of files) m.set(f.path, f.size);
+    return m;
+  }, [files]);
+
+  /**
+   * Adjacency indexes for hover highlighting. Built once per graph so each
+   * hover traversal is O(V + E); the previous implementation rescanned the
+   * full edge list for every visited node (O(V·E) per hover).
+   */
+  const adjacency = useMemo(() => {
+    const forward = new Map<string, { target: string; edgeId: string }[]>();
+    const reverse = new Map<string, { source: string; edgeId: string }[]>();
+    if (dependencies) {
+      for (const e of dependencies.edges) {
+        const edgeId = `${e.sourceId}-${e.targetId}`;
+        if (!forward.has(e.sourceId)) forward.set(e.sourceId, []);
+        forward.get(e.sourceId)!.push({ target: e.targetId, edgeId });
+        if (!reverse.has(e.targetId)) reverse.set(e.targetId, []);
+        reverse.get(e.targetId)!.push({ source: e.sourceId, edgeId });
+      }
+    }
+    return { forward, reverse };
+  }, [dependencies]);
 
   // ── Build git data lookup maps from raw git data ───────────────────────────
   // Git paths are repo-relative while node ids are absolute, so all maps are
@@ -577,8 +615,7 @@ const FlowWrapper: React.FC<{
 
     if (git && repoRoot) {
       for (const commit of git.commits) {
-        const ts = (commit as any).timestamp ?? (commit as any).date;
-        const dateStr = ts && typeof ts === 'string' ? ts.split('T')[0] : null;
+        const dateStr = commit.timestamp ? commit.timestamp.split('T')[0] : null;
 
         for (const file of commit.filesChanged || []) {
           if (!file) continue;
@@ -662,7 +699,7 @@ const FlowWrapper: React.FC<{
             ...n.data,
             inDegree: metrics?.fanIn ?? n.data.inDegree ?? 0,
             outDegree: metrics?.fanOut ?? n.data.outDegree ?? 0,
-            size: files.find(f => f.path === path)?.size ?? 0,
+            size: fileSizeMap.get(path) ?? 0,
             isHotspot,
             isCycle,
             dimmed: false,
@@ -672,60 +709,65 @@ const FlowWrapper: React.FC<{
 
     setNodes(processedNodes);
     setEdges(rawEdges);
-  }, [rawNodes, rawEdges, insights, filters, files, setNodes, setEdges]);
+  }, [rawNodes, rawEdges, insights, filters, fileSizeMap, setNodes, setEdges]);
 
-  // ── Hover BFS highlight ───────────────────────────────────────────────────
+  // ── Hover highlight (transitive dependency closure) ───────────────────────
+  // Traverses the memoized adjacency index (O(V+E)) and preserves object
+  // identity for untouched nodes/edges so React.memo skips their re-render.
   useEffect(() => {
     if (!hoveredNode || !dependencies) {
-      setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, dimmed: false } })));
-      setEdges(eds => eds.map(e => ({
-        ...e,
-        data: { ...e.data, isIncoming: false, isOutgoing: false, isDimmed: false }
-      })));
+      setNodes(nds => nds.map(n =>
+        n.data.dimmed === false ? n : { ...n, data: { ...n.data, dimmed: false } },
+      ));
+      setEdges(eds => eds.map(e => {
+        const d = e.data as { isIncoming?: boolean; isOutgoing?: boolean; isDimmed?: boolean } | undefined;
+        if (!d?.isIncoming && !d?.isOutgoing && !d?.isDimmed) return e;
+        return { ...e, data: { ...e.data, isIncoming: false, isOutgoing: false, isDimmed: false } };
+      }));
       return;
     }
 
-    const incomingIds = new Set<string>();
-    const outgoingIds = new Set<string>();
-    const incomingEdges = new Set<string>();
-    const outgoingEdges = new Set<string>();
-
-    const traverse = (nodeId: string, direction: 'in' | 'out', visitedNodes: Set<string>, visitedEdges: Set<string>) => {
-      if (visitedNodes.has(nodeId)) return;
-      visitedNodes.add(nodeId);
-
-      dependencies.edges.forEach(e => {
-        const edgeId = `${e.sourceId}-${e.targetId}`;
-        if (direction === 'out' && e.sourceId === nodeId) {
-          visitedEdges.add(edgeId);
-          traverse(e.targetId, direction, visitedNodes, visitedEdges);
+    // Iterative DFS over the prebuilt adjacency lists in each direction.
+    const walk = (
+      start: string,
+      next: (id: string) => { other: string; edgeId: string }[],
+    ): { nodes: Set<string>; edges: Set<string> } => {
+      const seen = new Set<string>([start]);
+      const edgeIds = new Set<string>();
+      const stack = [start];
+      while (stack.length > 0) {
+        const id = stack.pop()!;
+        for (const { other, edgeId } of next(id)) {
+          edgeIds.add(edgeId);
+          if (!seen.has(other)) {
+            seen.add(other);
+            stack.push(other);
+          }
         }
-        if (direction === 'in' && e.targetId === nodeId) {
-          visitedEdges.add(edgeId);
-          traverse(e.sourceId, direction, visitedNodes, visitedEdges);
-        }
-      });
+      }
+      return { nodes: seen, edges: edgeIds };
     };
 
-    traverse(hoveredNode, 'in', incomingIds, incomingEdges);
-    traverse(hoveredNode, 'out', outgoingIds, outgoingEdges);
+    const downstream = walk(hoveredNode, id =>
+      (adjacency.forward.get(id) ?? []).map(e => ({ other: e.target, edgeId: e.edgeId })));
+    const upstream = walk(hoveredNode, id =>
+      (adjacency.reverse.get(id) ?? []).map(e => ({ other: e.source, edgeId: e.edgeId })));
 
     setNodes(nds => nds.map(n => {
       if (n.type === 'folderNode') return n;
-      const isConnected = incomingIds.has(n.id) || outgoingIds.has(n.id) || n.id === hoveredNode;
-      return { ...n, data: { ...n.data, dimmed: !isConnected } };
+      const dimmed = !downstream.nodes.has(n.id) && !upstream.nodes.has(n.id);
+      return n.data.dimmed === dimmed ? n : { ...n, data: { ...n.data, dimmed } };
     }));
 
     setEdges(eds => eds.map(e => {
-      const isIncoming = incomingEdges.has(e.id);
-      const isOutgoing = outgoingEdges.has(e.id);
-      const isConnected = isIncoming || isOutgoing;
-      return {
-        ...e,
-        data: { ...e.data, isIncoming, isOutgoing, isDimmed: !isConnected },
-      };
+      const isOutgoing = downstream.edges.has(e.id);
+      const isIncoming = upstream.edges.has(e.id);
+      const isDimmed = !isIncoming && !isOutgoing;
+      const d = e.data as { isIncoming?: boolean; isOutgoing?: boolean; isDimmed?: boolean } | undefined;
+      if (d?.isIncoming === isIncoming && d?.isOutgoing === isOutgoing && d?.isDimmed === isDimmed) return e;
+      return { ...e, data: { ...e.data, isIncoming, isOutgoing, isDimmed } };
     }));
-  }, [hoveredNode, dependencies, setNodes, setEdges]);
+  }, [hoveredNode, dependencies, adjacency, setNodes, setEdges]);
 
   // ── External highlight (from Insights navigation) ────────────────────────
   // Re-runs when nodes populate so navigation works even while this lazy view
@@ -833,7 +875,7 @@ const FlowWrapper: React.FC<{
           onClose={() => setSelectedNode(null)}
           onOpen={handleOpenFile}
           moduleMetrics={insights?.moduleMetrics || new Map()}
-          dependencies={dependencies}
+          adjacency={adjacency}
           gitCommitMap={gitCommitMap}
           gitAuthorsMap={gitAuthorsMap}
           gitLastModifiedMap={gitLastModifiedMap}

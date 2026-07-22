@@ -9,17 +9,21 @@ import {
   useReactFlow,
   Panel
 } from '@xyflow/react';
-import type { Node, Edge } from '@xyflow/react';
+import type { Node, Edge, NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
+import { useShallow } from 'zustand/react/shallow';
 import { getGitDagreLayout } from './layoutUtils';
 import { CommitNode } from './CommitNode';
+import type { CommitNodeData } from './CommitNode';
 import { Search, ZoomIn, ZoomOut, Maximize, GitBranch, Filter, X, Users, ChevronDown } from 'lucide-react';
 import { hashAuthor } from '../../lib/authorColors';
 
 // Extended CommitNode wrapper so we can pass onOpenFile
-const CommitNodeWrapper = (props: any) => {
-  const { setActiveFile, files } = useRepositoryStore();
+const CommitNodeWrapper = (props: NodeProps<Node<CommitNodeData>>) => {
+  const { setActiveFile, files } = useRepositoryStore(
+    useShallow(s => ({ setActiveFile: s.setActiveFile, files: s.files })),
+  );
   const handleOpenFile = (relativePath: string) => {
     // Try to match relative path against absolute file paths
     const fileModel = files.find(f => f.path.endsWith(relativePath) || f.name === relativePath.split('/').pop());
@@ -178,7 +182,7 @@ const GitToolbar = ({
 
 /* ── Flow wrapper ──────────────────────────────────────────────────── */
 const FlowWrapper: React.FC = () => {
-  const { git } = useRepositoryStore();
+  const git = useRepositoryStore(s => s.git);
   const { setCenter } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -204,9 +208,8 @@ const FlowWrapper: React.FC = () => {
     return git.commits.filter(c => {
       if (selectedAuthor && c.author !== selectedAuthor) return false;
       if (dateFrom || dateTo) {
-        const ts = (c as any).timestamp ?? (c as any).date;
-        if (ts) {
-          const commitDate = ts.split('T')[0];
+        if (c.timestamp) {
+          const commitDate = c.timestamp.split('T')[0];
           if (dateFrom && commitDate < dateFrom) return false;
           if (dateTo && commitDate > dateTo) return false;
         }

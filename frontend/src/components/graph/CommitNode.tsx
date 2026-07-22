@@ -3,7 +3,7 @@ import { Handle, Position } from '@xyflow/react';
 import { GitCommit, GitBranch, Tag, Clock, FileCode, ChevronDown, ChevronUp } from 'lucide-react';
 import { hashAuthor } from '../../lib/authorColors';
 
-interface CommitNodeData {
+export interface CommitNodeData extends Record<string, unknown> {
   hash: string;
   message: string;
   author: string;

@@ -1,6 +1,6 @@
 import dagre from 'dagre';
 import type { Node, Edge } from '@xyflow/react';
-import type { DependencyGraphData } from '../../types';
+import type { DependencyGraphData, GitCommitNode } from '../../types';
 
 export const getDagreLayout = (data: DependencyGraphData, direction: 'TB' | 'LR' = 'LR') => {
   const dagreGraph = new dagre.graphlib.Graph({ compound: true });
@@ -106,7 +106,7 @@ export const getDagreLayout = (data: DependencyGraphData, direction: 'TB' | 'LR'
   return { nodes: xyNodes, edges: xyEdges };
 };
 
-export const getGitDagreLayout = (data: { commits: any[] }, direction: 'TB' | 'LR' = 'TB') => {
+export const getGitDagreLayout = (data: { commits: GitCommitNode[] }, direction: 'TB' | 'LR' = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   

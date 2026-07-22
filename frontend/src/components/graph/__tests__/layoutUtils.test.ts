@@ -47,8 +47,8 @@ describe('getDagreLayout', () => {
 
 describe('getGitDagreLayout', () => {
   const commits = [
-    { hash: 'c2', parents: ['c1'], message: 'second', author: 'A', refs: [], timestamp: 't2' },
-    { hash: 'c1', parents: [], message: 'first', author: 'A', refs: [], timestamp: 't1' },
+    { hash: 'c2', parents: ['c1'], message: 'second', author: 'A', refs: [], timestamp: 't2', filesChanged: [] },
+    { hash: 'c1', parents: [], message: 'first', author: 'A', refs: [], timestamp: 't1', filesChanged: [] },
   ];
   const { nodes, edges } = getGitDagreLayout({ commits }, 'TB');
 
