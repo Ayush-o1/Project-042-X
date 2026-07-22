@@ -11,3 +11,17 @@ export class FileSystemAccessError extends Error {
     this.name = 'FileSystemAccessError';
   }
 }
+
+export class FileAccessDeniedError extends Error {
+  constructor() {
+    super('Access denied: the requested file is not part of the analyzed repository.');
+    this.name = 'FileAccessDeniedError';
+  }
+}
+
+export class NoRepositoryAnalyzedError extends Error {
+  constructor() {
+    super('No repository has been analyzed yet.');
+    this.name = 'NoRepositoryAnalyzedError';
+  }
+}

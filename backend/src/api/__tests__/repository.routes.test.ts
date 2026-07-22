@@ -77,13 +77,38 @@ describe('API Routes Integration', () => {
     expect(validFileRes.status).toBe(200);
     expect(validFileRes.body.data).toBe('console.log("hello");');
 
-    // Test path traversal security
+    // Path traversal: files outside the repository are rejected with 403
     const outsidePath = path.join(os.tmpdir(), 'malicious.txt');
     await fs.writeFile(outsidePath, 'secret');
     const invalidFileRes = await request(app)
       .get('/api/v1/repository/file-content')
       .query({ path: outsidePath });
-    expect(invalidFileRes.status).toBe(500); // Because it throws an Error currently in service
-    expect(invalidFileRes.body.error.message).toContain('Access Denied');
+    expect(invalidFileRes.status).toBe(403);
+    expect(invalidFileRes.body.error.code).toBe('ACCESS_DENIED');
+    await fs.rm(outsidePath, { force: true });
+
+    // Files inside the repo but not part of the scanned set (e.g. git internals)
+    // are also rejected
+    const gitInternalRes = await request(app)
+      .get('/api/v1/repository/file-content')
+      .query({ path: path.join(tempDir, '.git', 'config') });
+    expect(gitInternalRes.status).toBe(403);
+    expect(gitInternalRes.body.error.code).toBe('ACCESS_DENIED');
+  });
+
+  it('GET /api/v1/repository/file-content should reject relative paths', async () => {
+    const res = await request(app)
+      .get('/api/v1/repository/file-content')
+      .query({ path: '../etc/passwd' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('should reject requests with a non-local Host header (DNS rebinding guard)', async () => {
+    const res = await request(app)
+      .get('/api/v1/health')
+      .set('Host', 'evil.example.com');
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN_HOST');
   });
 });
