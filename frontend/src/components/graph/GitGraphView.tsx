@@ -34,6 +34,15 @@ const CommitNodeWrapper = (props: NodeProps<Node<CommitNodeData>>) => {
 
 const nodeTypes = { commitNode: CommitNodeWrapper };
 
+/**
+ * Upper bound on commits rendered as graph nodes. Git history can run into
+ * the tens of thousands; laying out and mounting that many 300x80px DOM
+ * nodes with dagre freezes the tab well before it becomes readable anyway.
+ * The backend already caps analysis at DEFAULT_MAX_COMMITS (20,000); this
+ * caps what's actually drawn, since even a few thousand nodes is unusable.
+ */
+const MAX_RENDERED_COMMITS = 500;
+
 /* ── Git Toolbar ──────────────────────────────────────────────────── */
 const GitToolbar = ({
   nodes,
@@ -202,7 +211,7 @@ const FlowWrapper: React.FC = () => {
     return Array.from(authorSet).sort();
   }, [git]);
 
-  // Filtered commits
+  // Filtered commits (git.commits is already newest-first from the backend)
   const filteredCommits = useMemo(() => {
     if (!git) return [];
     return git.commits.filter(c => {
@@ -218,17 +227,25 @@ const FlowWrapper: React.FC = () => {
     });
   }, [git, selectedAuthor, dateFrom, dateTo]);
 
-  // Rebuild layout when filtered commits change
+  // Commits actually drawn — capped to keep dagre layout and DOM mounting fast
+  const renderedCommits = useMemo(
+    () => filteredCommits.slice(0, MAX_RENDERED_COMMITS),
+    [filteredCommits],
+  );
+  const isCapped = filteredCommits.length > renderedCommits.length;
+
+  // Rebuild layout when the rendered commit set changes
   useEffect(() => {
-    if (filteredCommits.length > 0) {
-      const { nodes: ln, edges: le } = getGitDagreLayout({ commits: filteredCommits }, 'TB');
+    if (renderedCommits.length > 0) {
+      const { nodes: ln, edges: le } = getGitDagreLayout({ commits: renderedCommits }, 'TB');
+      const commitsByHash = new Map(renderedCommits.map(c => [c.hash, c]));
       // Inject author color and filesChanged into node data
       const enrichedNodes = ln.map(n => ({
         ...n,
         data: {
           ...n.data,
           authorColor: hashAuthor(n.data.author as string || ''),
-          filesChanged: filteredCommits.find(c => c.hash === n.id)?.filesChanged || [],
+          filesChanged: commitsByHash.get(n.id)?.filesChanged || [],
         },
       }));
       setNodes(enrichedNodes);
@@ -237,7 +254,7 @@ const FlowWrapper: React.FC = () => {
       setNodes([]);
       setEdges([]);
     }
-  }, [filteredCommits, setNodes, setEdges]);
+  }, [renderedCommits, setNodes, setEdges]);
 
   // BFS highlight
   useEffect(() => {
@@ -251,13 +268,12 @@ const FlowWrapper: React.FC = () => {
       return;
     }
 
+    // Only rendered commits exist as nodes, so only those need scanning.
     const connected = new Set<string>([hoveredNode]);
-    if (git) {
-      filteredCommits.forEach(commit => {
-        if (commit.hash === hoveredNode) commit.parents.forEach(p => connected.add(p));
-        if (commit.parents.includes(hoveredNode)) connected.add(commit.hash);
-      });
-    }
+    renderedCommits.forEach(commit => {
+      if (commit.hash === hoveredNode) commit.parents.forEach(p => connected.add(p));
+      if (commit.parents.includes(hoveredNode)) connected.add(commit.hash);
+    });
 
     setNodes(nds => nds.map(n => ({
       ...n,
@@ -277,7 +293,7 @@ const FlowWrapper: React.FC = () => {
         },
       };
     }));
-  }, [hoveredNode, git, filteredCommits, setNodes, setEdges]);
+  }, [hoveredNode, renderedCommits, setNodes, setEdges]);
 
   const handleSearchFocus = (nodeId: string) => {
     const node = nodes.find(n => n.id === nodeId);
@@ -303,13 +319,13 @@ const FlowWrapper: React.FC = () => {
     );
   }
 
-  const shownCount = filteredCommits.length;
   const totalCount = git.commits.length;
+  const hasFilters = Boolean(selectedAuthor || dateFrom || dateTo);
 
   return (
     <>
-      {/* Filter status bar */}
-      {(selectedAuthor || dateFrom || dateTo) && (
+      {/* Status bar: active filters and/or the render cap */}
+      {(hasFilters || isCapped) && (
         <div style={{
           position: 'absolute', top: 'var(--space-5)', left: 'var(--space-5)',
           zIndex: 10, display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
@@ -324,16 +340,19 @@ const FlowWrapper: React.FC = () => {
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-primary)' }}>{selectedAuthor}</span>
             </div>
           )}
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
-            {shownCount} of {totalCount} commits
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }} title={isCapped ? `Showing the ${MAX_RENDERED_COMMITS} most recent commits of ${filteredCommits.length} matching` : undefined}>
+            {renderedCommits.length} of {totalCount} commits{isCapped ? ' (capped)' : ''}
           </span>
-          <button
-            type="button"
-            onClick={() => { setSelectedAuthor(''); setDateFrom(''); setDateTo(''); }}
-            style={{ color: 'var(--text-tertiary)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-          >
-            <X size={12} />
-          </button>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={() => { setSelectedAuthor(''); setDateFrom(''); setDateTo(''); }}
+              style={{ color: 'var(--text-tertiary)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              aria-label="Clear filters"
+            >
+              <X size={12} />
+            </button>
+          )}
         </div>
       )}
 
