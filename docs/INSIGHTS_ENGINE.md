@@ -10,11 +10,11 @@ The engine is primarily housed in the frontend to leverage the already-fetched r
 The `GitIntelligenceEngine` in the backend was extended with a `--name-only` log flag. This is the only backend modification. By shipping file-level changes to the frontend alongside the commit hashes, the backend provides the raw ingredients necessary for historical frequency analysis without performing the aggregation itself.
 
 ### Frontend Responsibilities
-The `insightsEngine.ts` file acts as the algorithmic core. When the `useRepositoryStore` state updates, the engine recalculates:
+The `insightsEngine.ts` file acts as the algorithmic core. `computeInsights` runs once, inside the `useRepositoryStore.analyze()` action (or when a saved session is loaded), and the result is cached as `state.insights`:
 1. **Graph Metrics**: Builds adjacency lists from the dependency nodes/edges, runs Tarjan's SCC to detect cycles, and memoized DFS for maximum-depth calculations. Coupling metrics (orphans, average fan-in, graph density) are computed over parseable source files only, since only those can carry edges.
 2. **Git Aggregations**: Grouping `--name-only` arrays across all commits to find the absolute most active files (churn hotspots).
 3. **File System Aggregations**: Summing file sizes grouped by repo-relative directory paths to discover the largest sub-modules.
 
 ## Performance Considerations
 - **In-Memory Graphs**: Graph traversal is extremely fast (milliseconds for thousands of nodes) since it's operating on raw Javascript objects, not DOM nodes.
-- **Memoized Evaluation**: Consumers (the Insights dashboard and the Architecture graph overlays) compute insights inside `useMemo`, so the engine only re-runs when the underlying repository data changes.
+- **Computed once, shared everywhere**: the Insights dashboard, the Architecture graph overlays, header exports, and the keyboard-shortcut handlers all read the same `state.insights` rather than each recomputing it — earlier versions recomputed insights independently in every consumer.

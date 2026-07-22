@@ -28,7 +28,15 @@ Responsible for semantic code understanding.
 Extracts version control metadata using a `simple-git` wrapper.
 - Parses the Git commit tree to identify parent-child topologies (including merge commits).
 - Captures `--name-only` diffs for every commit.
+- Accepts a `maxCommits` cap (default 20,000, newest first) so history on very large repositories doesn't grow unbounded in memory.
 - Provides the raw data required for the frontend to calculate file modification hotspots and activity timelines.
+
+### 4. Analysis Registry
+`RepositoryService` holds completed analyses as addressable, in-memory resources rather than a single global "current repository."
+- Each `POST /analyze` returns an `analysisId`; every other endpoint accepts it as a query parameter and resolves strictly to that analysis, so two analyses running close together (or in different browser tabs) can never serve each other's data.
+- Requests without an id fall back to the most recently completed analysis.
+- The three most recent analyses are kept; older ones are evicted to bound memory.
+- `GET /repository/git` additionally accepts `offset`/`limit` for paged history reads.
 
 ---
 
@@ -36,24 +44,31 @@ Extracts version control metadata using a `simple-git` wrapper.
 
 The frontend is built with React 19, Vite, and Zustand. It receives the raw analysis data and computes the presentation layer.
 
-### 1. State Management (Zustand)
+### 1. API Client (`src/api`)
+`contracts.ts` describes the backend's exact wire shapes; `client.ts` is the only place that calls `fetch` and converts those shapes into the frontend's domain models. Components and the store never see raw backend JSON.
+
+### 2. State Management (Zustand)
 The `useRepositoryStore` acts as the single source of truth.
-- Normalizes backend DTOs into strongly-typed frontend models.
+- Carries the `analysisId` returned by `/analyze` and passes it to every subsequent request.
+- Computes `insights` exactly once per completed analysis (or loaded session) and exposes it as state, rather than each consumer recomputing it.
 - Manages the active tab state, open files array, and modal visibility.
 - Handles the `AbortController` for graceful cancellation of heavy API requests.
+- Components subscribe with field-level or shallow selectors so unrelated state changes (e.g. a progress tick) don't re-render the whole tree.
 
-### 2. Insights Engine
+### 3. Insights Engine
 A purely mathematical module that calculates derived metrics from the dependency graph and Git history.
 - **Circular Dependencies**: Implements Tarjan's Strongly Connected Components (SCC) algorithm to detect cycles in the dependency DAG.
 - **Dependency Chains**: Uses memoized Depth-First Search (DFS) to identify the maximum import depth.
 - **Fan-In / Hotspots**: Calculates the in-degree of all nodes to flag over-coupled files.
 - **Git Activity**: Aggregates file modification frequencies to determine the most active modules.
 
-### 3. Graph Engine (React Flow + Dagre)
+### 4. Graph Engine (React Flow + Dagre)
 Separates topological data from spatial data.
 - The backend provides nodes and edges without X/Y coordinates.
 - The frontend uses `dagre` to execute a directed graph layout algorithm (Top-to-Bottom for Git, Left-to-Right for Dependencies).
 - Coordinates are passed to `@xyflow/react` (React Flow), which renders nodes as DOM elements and edges as SVG, and handles zooming, panning, and viewport virtualization.
+- Forward/reverse adjacency indexes are built once per loaded graph; hover highlighting walks these indexes (O(V+E) per hover) instead of rescanning the edge list at every traversal step.
+- The Git Timeline caps rendered commits (most recent 500) independently of how many were analyzed, since dagre-laying-out and mounting tens of thousands of commit nodes is unusable regardless of correctness.
 
 ### 4. Export & Session Engine
 Provides zero-configuration persistence.
@@ -66,11 +81,11 @@ Provides zero-configuration persistence.
 
 1. **Initialization**: User submits an absolute filesystem path in the UI.
 2. **Analysis Request**: Frontend issues a `POST /api/v1/repository/analyze` request.
-3. **Backend Orchestration**: `RepositoryIntelligenceEngine` runs the Scanner→AST pipeline and the Git engine as concurrent async operations, then merges the results into a `UnifiedRepositoryModel` held in memory. The API serves one analyzed repository at a time; a new analysis replaces the previous one.
-4. **Staged Transfer**: The frontend then fetches files, dependencies, and git data via three sequential `GET` requests so the UI can populate incrementally.
-5. **Normalization**: `useRepositoryStore` normalizes the incoming payloads into frontend models (e.g., serialized dates to timestamp strings).
-6. **Metric Computation**: `computeInsights` calculates Tarjan's SCC, memoized-DFS depth, coupling, and health metrics.
-7. **Layout Calculation**: `getDagreLayout` computes X/Y coordinates for the graph nodes.
+3. **Backend Orchestration**: `RepositoryIntelligenceEngine` runs the Scanner→AST pipeline and the Git engine as concurrent async operations, then merges the results into a `UnifiedRepositoryModel` held by `RepositoryService` under a fresh `analysisId`.
+4. **Staged Transfer**: The frontend fetches files, dependencies, and git data via three sequential `GET` requests (each carrying `analysisId`) so the UI can populate incrementally.
+5. **Normalization**: `src/api/client.ts` converts backend wire shapes into frontend domain models (e.g., serialized dates to timestamp strings) before the data ever reaches the store.
+6. **Metric Computation**: `computeInsights` runs once, calculating Tarjan's SCC, memoized-DFS depth, coupling, and health metrics; the result is cached in the store.
+7. **Layout Calculation**: `getDagreLayout` computes X/Y coordinates for the graph nodes; an adjacency index is built alongside for O(V+E) hover highlighting.
 8. **Rendering**: React Flow renders the nodes (DOM) and edges (SVG), virtualizing offscreen elements.
 
 ---
@@ -94,6 +109,7 @@ Project 042-X/
 │   │   └── server.ts             # Application entry point
 ├── frontend/
 │   ├── src/
+│   │   ├── api/                  # Wire contracts and the typed fetch client
 │   │   ├── components/
 │   │   │   ├── graph/            # React Flow and Dagre implementations
 │   │   │   ├── insights/         # Dashboard and metric KPI components

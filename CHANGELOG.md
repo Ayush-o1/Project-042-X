@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-22
+
+### Changed
+- **Analysis lifecycle**: `RepositoryService` no longer caches a single global "current repository." Each analysis is now an addressable resource keyed by an `analysisId` returned from `POST /analyze`; every other endpoint accepts it and resolves strictly to that analysis. Requests without an id fall back to the most recent analysis, so existing clients are unaffected. The 3 most recent analyses are kept in memory; older ones are evicted.
+- **Typed API boundary**: added `frontend/src/api/{contracts,client}.ts`. Backend wire shapes are described once and converted to frontend domain models in a single place, removing the `as any[]` normalization that previously lived inline in the store.
+- **Insights computed once**: `computeInsights` now runs a single time per completed analysis (or loaded session) and is stored as `state.insights`; the graph view, dashboard, header exports, and keyboard-shortcut handlers all read the same cached result instead of each recomputing Tarjan's SCC and DFS independently.
+- **Zustand selectors**: every component previously called `useRepositoryStore()` with no selector, subscribing to the entire store. All consumers now use field-level or shallow selectors; the sidebar's per-row component now reads only its own expanded/selected/favorite state, so toggling one folder no longer re-renders the whole (virtualized) file list.
+
+### Performance
+- Dependency-graph hover highlighting rebuilt on a prebuilt forward/reverse adjacency index, replacing an O(V·E) full edge-list rescan per hover with O(V+E). The Node Inspector's dependents/dependencies lists use the same index instead of filtering all edges on every render.
+- Git Timeline now caps rendered commits at the 500 most recent (of whatever matches the active filters); analysis itself caps git history at 20,000 commits by default via a newly-wired `maxCommits` option. Both are configurable server-side; neither existed before, so very large repositories could previously exhaust memory during analysis or freeze the tab during layout.
+- `GET /repository/git` accepts `offset`/`limit` for paged history reads and reports `totalCommits`.
+
+### Added
+- Frontend test suite (Vitest): 37 tests covering `computeInsights` (cycle detection, orphan/source filtering, Martin instability, deterministic git joins, Map/Set serialization), dagre layout utilities, and the Zustand store (analysis lifecycle, cancellation, folder toggling, tab/file navigation).
+- Backend tests for the analysis registry: id isolation under concurrent analyses, 404 on unknown/evicted ids, eviction bound, and scanner-membership file access.
+
 ## [1.1.0] - 2026-07-22
 
 ### Security

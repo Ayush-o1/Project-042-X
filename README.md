@@ -114,23 +114,24 @@ The backend reads local files on behalf of the frontend, so it is deliberately l
 
 - **Parsing**: SWC (Rust-based) parses ASTs significantly faster than JavaScript-based parsers.
 - **Layout**: `dagre` runs synchronously on the main thread; very large graphs (thousands of nodes) cause a noticeable pause during layout.
-- **Rendering**: React Flow virtualizes offscreen nodes; the file explorer is virtualized with `react-virtuoso`.
+- **Rendering**: React Flow virtualizes offscreen nodes; the file explorer is virtualized with `react-virtuoso`. The dependency graph's hover highlighting uses a prebuilt adjacency index (O(V+E) per hover, not a rescan of every edge).
+- **Git history**: analysis caps history at 20,000 commits (newest first) by default, and the Git Timeline additionally renders at most the 500 most recent matching commits — enough to be useful, not enough to freeze dagre layout or the DOM on very large histories.
 
 ## Known Limitations
 
 - The AST engine resolves ES module `import`/`export` syntax (plus `import x = require(...)`). Bare CommonJS `require()` calls are not extracted.
 - `tsconfig.json` path aliases (e.g. `@/components/...`) are not resolved, so alias imports do not appear as graph edges.
-- The backend analyzes one repository at a time; a new analysis replaces the previous one.
+- The backend keeps the 3 most recently completed analyses addressable by id (older ones are evicted); it is not a general-purpose multi-tenant service.
 - Git worktrees and submodules (where `.git` is a file, not a directory) are not supported.
 - Symbolic links are not followed during scanning.
 - Files larger than 5 MB are skipped.
-- The full commit history is loaded at once; extremely large histories (100k+ commits) will be slow.
+- The Code Viewer is not virtualized; very large individual files (tens of thousands of lines) can be slow to syntax-highlight.
 
 ## Future Improvements
 
 - Web Worker for off-thread `dagre` layout on large graphs.
 - `tsconfig.json` path-alias and monorepo workspace resolution.
-- Commit-count capping with paged retrieval for very large histories.
+- Virtualized Code Viewer for very large individual files.
 - Real-time file watching with incremental graph updates.
 
 ## License
