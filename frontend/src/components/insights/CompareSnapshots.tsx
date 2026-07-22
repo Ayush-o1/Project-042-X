@@ -2,103 +2,259 @@ import React, { useEffect, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { listSessions, loadSession } from '../../lib/sessionEngine';
 import type { AnalysisSession } from '../../lib/sessionEngine';
-import { X, ArrowRight } from 'lucide-react';
+import { X, ArrowRight, GitCompare, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+
+type SessionSummary = { id: string; name: string; timestamp: string; path: string };
+
+interface DiffRow {
+  label: string;
+  a: number;
+  b: number;
+  isFloat?: boolean;
+  lowerIsBetter?: boolean;
+}
+
+const DiffCell: React.FC<{ a: number; b: number; isFloat?: boolean; lowerIsBetter?: boolean }> = ({
+  a, b, isFloat, lowerIsBetter,
+}) => {
+  const diff = b - a;
+  const improved = lowerIsBetter ? diff < 0 : diff > 0;
+  const regressed = lowerIsBetter ? diff > 0 : diff < 0;
+
+  if (diff === 0)
+    return <span style={{ color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 4 }}><Minus size={12} /> —</span>;
+
+  const formatted = isFloat ? `${diff > 0 ? '+' : ''}${diff.toFixed(2)}` : `${diff > 0 ? '+' : ''}${diff}`;
+  const color = improved ? 'var(--color-success)' : regressed ? 'var(--color-danger)' : 'var(--text-tertiary)';
+  const Icon = improved ? TrendingUp : TrendingDown;
+
+  return (
+    <span style={{ color, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 'var(--weight-semibold)' }}>
+      <Icon size={12} />
+      {formatted}
+    </span>
+  );
+};
 
 export const CompareSnapshots: React.FC = () => {
   const { isCompareModalOpen, setCompareModalOpen } = useRepositoryStore();
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionA, setSessionA] = useState<AnalysisSession | null>(null);
   const [sessionB, setSessionB] = useState<AnalysisSession | null>(null);
+  const [loadingA, setLoadingA] = useState(false);
+  const [loadingB, setLoadingB] = useState(false);
 
   useEffect(() => {
     if (isCompareModalOpen) {
-      listSessions().then(setSessions);
+      listSessions().then(list => setSessions(list as SessionSummary[]));
     } else {
       setSessionA(null);
       setSessionB(null);
     }
   }, [isCompareModalOpen]);
 
+  useEffect(() => {
+    if (!isCompareModalOpen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setCompareModalOpen(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isCompareModalOpen, setCompareModalOpen]);
+
   const handleSelectA = async (id: string) => {
     if (!id) return setSessionA(null);
+    setLoadingA(true);
     const s = await loadSession(id);
     setSessionA(s || null);
+    setLoadingA(false);
   };
 
   const handleSelectB = async (id: string) => {
     if (!id) return setSessionB(null);
+    setLoadingB(true);
     const s = await loadSession(id);
     setSessionB(s || null);
+    setLoadingB(false);
   };
 
   if (!isCompareModalOpen) return null;
 
-  const getDiff = (a: number, b: number) => {
-    const diff = b - a;
-    if (diff > 0) return <span style={{ color: 'var(--color-danger)' }}>+{diff}</span>;
-    if (diff < 0) return <span style={{ color: 'var(--color-success)' }}>{diff}</span>;
-    return <span style={{ color: 'var(--text-tertiary)' }}>No change</span>;
-  };
+  const diffRows: DiffRow[] = sessionA && sessionB ? [
+    { label: 'Total Files',           a: sessionA.metadata.statistics.totalFiles,      b: sessionB.metadata.statistics.totalFiles },
+    { label: 'Total Commits',         a: sessionA.metadata.statistics.totalCommits,     b: sessionB.metadata.statistics.totalCommits },
+    { label: 'Dependencies',          a: sessionA.dependencies?.edges.length || 0,      b: sessionB.dependencies?.edges.length || 0 },
+    { label: 'Circular Dependencies', a: sessionA.insights?.circularDependencies.length || 0, b: sessionB.insights?.circularDependencies.length || 0, lowerIsBetter: true },
+    { label: 'Orphan Files',          a: sessionA.insights?.orphanFiles.length || 0,    b: sessionB.insights?.orphanFiles.length || 0, lowerIsBetter: true },
+    { label: 'Average Fan-In',        a: sessionA.insights?.averageFanIn || 0,          b: sessionB.insights?.averageFanIn || 0, isFloat: true },
+    { label: 'Max Dependency Depth',  a: sessionA.insights?.longestDependencyChain || 0, b: sessionB.insights?.longestDependencyChain || 0 },
+  ] : [];
 
   return (
-    <div className="fixed inset-0 z-50 flex-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-      <div className="glass-panel" style={{ width: '800px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-default)', borderRadius: '12px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
-        
-        <div className="flex-between" style={{ padding: '20px', borderBottom: '1px solid var(--border-subtle)' }}>
-          <h2 className="text-lg" style={{ fontWeight: 600 }}>Compare Repository Snapshots</h2>
-          <button onClick={() => setCompareModalOpen(false)} style={{ color: 'var(--text-tertiary)', background: 'transparent' }}><X size={20} /></button>
+    <div
+      className="modal-overlay centered"
+      onClick={e => { if (e.target === e.currentTarget) setCompareModalOpen(false); }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="compare-title"
+    >
+      <div className="modal-sheet" style={{ width: 720, maxHeight: '85vh' }}>
+
+        {/* Header */}
+        <div className="modal-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+            <div
+              style={{
+                width: 28, height: 28,
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-lg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <GitCompare size={14} />
+            </div>
+            <h2 id="compare-title" className="modal-title">Compare Snapshots</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCompareModalOpen(false)}
+            className="btn-icon btn-icon-md"
+            aria-label="Close"
+          >
+            <X size={15} />
+          </button>
         </div>
 
-        <div style={{ padding: '20px', display: 'flex', gap: '20px' }}>
-          <div style={{ flex: 1 }}>
-            <label className="text-sm" style={{ color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>Base Snapshot (A)</label>
-            <select onChange={(e) => handleSelectA(e.target.value)} style={{ width: '100%', padding: '8px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px', color: 'var(--text-primary)' }}>
-              <option value="">Select Session...</option>
-              {sessions.map(s => <option key={s.id} value={s.id}>{s.name} ({new Date(s.timestamp).toLocaleString()})</option>)}
+        {/* Session pickers */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto 1fr',
+            alignItems: 'end',
+            gap: 'var(--space-4)',
+            padding: 'var(--space-6) var(--space-10)',
+            borderBottom: '1px solid var(--border-default)',
+          }}
+        >
+          {/* Picker A */}
+          <div>
+            <label
+              htmlFor="session-a"
+              style={{ display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)', fontWeight: 'var(--weight-medium)' }}
+            >
+              Base Snapshot (A)
+            </label>
+            <select id="session-a" className="select" onChange={e => handleSelectA(e.target.value)} disabled={loadingA}>
+              <option value="">Select session…</option>
+              {sessions.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} · {new Date(s.timestamp).toLocaleDateString()}
+                </option>
+              ))}
             </select>
           </div>
-          <div className="flex-center" style={{ paddingTop: '24px', color: 'var(--text-tertiary)' }}><ArrowRight size={20} /></div>
-          <div style={{ flex: 1 }}>
-            <label className="text-sm" style={{ color: 'var(--text-secondary)', marginBottom: '8px', display: 'block' }}>Target Snapshot (B)</label>
-            <select onChange={(e) => handleSelectB(e.target.value)} style={{ width: '100%', padding: '8px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '6px', color: 'var(--text-primary)' }}>
-              <option value="">Select Session...</option>
-              {sessions.map(s => <option key={s.id} value={s.id}>{s.name} ({new Date(s.timestamp).toLocaleString()})</option>)}
+
+          <ArrowRight size={18} style={{ color: 'var(--text-tertiary)', marginBottom: 8 }} />
+
+          {/* Picker B */}
+          <div>
+            <label
+              htmlFor="session-b"
+              style={{ display: 'block', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)', fontWeight: 'var(--weight-medium)' }}
+            >
+              Target Snapshot (B)
+            </label>
+            <select id="session-b" className="select" onChange={e => handleSelectB(e.target.value)} disabled={loadingB}>
+              <option value="">Select session…</option>
+              {sessions.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} · {new Date(s.timestamp).toLocaleDateString()}
+                </option>
+              ))}
             </select>
           </div>
         </div>
 
-        <div style={{ padding: '20px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-panel)' }}>
+        {/* Diff table */}
+        <div className="modal-body">
           {!sessionA || !sessionB ? (
-            <div className="flex-center text-sm" style={{ color: 'var(--text-tertiary)', padding: '40px' }}>
-              Select two sessions to compare architecture metrics.
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 'var(--space-16)',
+                gap: 'var(--space-4)',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <GitCompare size={28} style={{ opacity: 0.3 }} />
+              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
+                Select two sessions above to compare their metrics
+              </span>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '16px', padding: '12px', borderBottom: '1px solid var(--border-subtle)', fontWeight: 600, color: 'var(--text-secondary)' }} className="text-sm">
-                <span>Metric</span>
-                <span>Base (A)</span>
-                <span>Target (B)</span>
-                <span>Difference</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              {/* Table header */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '2fr 1fr 1fr 1fr',
+                  gap: 'var(--space-4)',
+                  padding: 'var(--space-3) var(--space-5)',
+                  borderBottom: '1px solid var(--border-default)',
+                  marginBottom: 'var(--space-2)',
+                }}
+              >
+                {['Metric', 'Base (A)', 'Target (B)', 'Δ Difference'].map(h => (
+                  <span
+                    key={h}
+                    style={{
+                      fontSize: 'var(--text-2xs)',
+                      fontWeight: 'var(--weight-semibold)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.07em',
+                      color: 'var(--text-tertiary)',
+                    }}
+                  >
+                    {h}
+                  </span>
+                ))}
               </div>
 
-              {[
-                { label: 'Total Files', a: sessionA.metadata.statistics.totalFiles, b: sessionB.metadata.statistics.totalFiles },
-                { label: 'Total Commits', a: sessionA.metadata.statistics.totalCommits, b: sessionB.metadata.statistics.totalCommits },
-                { label: 'Dependencies', a: sessionA.dependencies?.edges.length || 0, b: sessionB.dependencies?.edges.length || 0 },
-                { label: 'Circular Dependencies', a: sessionA.insights?.circularDependencies.length || 0, b: sessionB.insights?.circularDependencies.length || 0 },
-                { label: 'Orphan Files', a: sessionA.insights?.orphanFiles.length || 0, b: sessionB.insights?.orphanFiles.length || 0 },
-                { label: 'Average Fan-In', a: sessionA.insights?.averageFanIn || 0, b: sessionB.insights?.averageFanIn || 0, isFloat: true },
-                { label: 'Max Depth', a: sessionA.insights?.longestDependencyChain || 0, b: sessionB.insights?.longestDependencyChain || 0 },
-              ].map((row, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '16px', padding: '12px', backgroundColor: 'var(--bg-surface)', borderRadius: '6px', border: '1px solid var(--border-subtle)' }} className="text-sm">
-                  <span style={{ fontWeight: 500 }}>{row.label}</span>
-                  <span>{row.isFloat ? row.a.toFixed(2) : row.a}</span>
-                  <span>{row.isFloat ? row.b.toFixed(2) : row.b}</span>
-                  <span style={{ fontWeight: 600 }}>{row.isFloat ? (row.b - row.a).toFixed(2) : getDiff(row.a, row.b)}</span>
+              {/* Table rows */}
+              {diffRows.map((row, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '2fr 1fr 1fr 1fr',
+                    gap: 'var(--space-4)',
+                    padding: 'var(--space-4) var(--space-5)',
+                    background: 'var(--bg-surface)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--border-subtle)',
+                    transition: 'background var(--duration-fast)',
+                    alignItems: 'center',
+                  }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-surface)'}
+                >
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--text-primary)' }}>
+                    {row.label}
+                  </span>
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                    {row.isFloat ? row.a.toFixed(2) : row.a}
+                  </span>
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                    {row.isFloat ? row.b.toFixed(2) : row.b}
+                  </span>
+                  <div style={{ fontSize: 'var(--text-sm)' }}>
+                    <DiffCell a={row.a} b={row.b} isFloat={row.isFloat} lowerIsBetter={row.lowerIsBetter} />
+                  </div>
                 </div>
               ))}
-
             </div>
           )}
         </div>

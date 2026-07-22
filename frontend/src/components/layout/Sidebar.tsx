@@ -1,9 +1,14 @@
 import React, { useMemo } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
-import { ChevronRight, ChevronDown, File, FileCode2, FileJson, Image as ImageIcon } from 'lucide-react';
+import {
+  ChevronRight, ChevronDown, File, FileCode2, FileJson,
+  Image as ImageIcon, Star, X, Layers,
+  FileText
+} from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
 import type { FileModel } from '../../types';
 
+/* ── Tree types ─────────────────────────────────────────────── */
 interface TreeNode {
   name: string;
   path: string;
@@ -13,91 +18,163 @@ interface TreeNode {
   depth: number;
 }
 
-const FileTreeNode: React.FC<{ node: TreeNode; }> = React.memo(({ node }) => {
-  const { setActiveFile, activeFile, expandedFolders, toggleFolder, toggleFavorite, favorites } = useRepositoryStore();
-  const isOpen = expandedFolders[node.path] || false;
+/* ── File icon by extension ─────────────────────────────────── */
+const getFileIcon = (ext?: string): React.ReactNode => {
+  if (['.ts', '.tsx'].includes(ext || ''))
+    return <FileCode2 size={13} color="var(--lang-ts)" />;
+  if (['.js', '.jsx'].includes(ext || ''))
+    return <FileCode2 size={13} color="var(--lang-js)" />;
+  if (['.json'].includes(ext || ''))
+    return <FileJson size={13} color="var(--lang-json)" />;
+  if (['.md', '.mdx'].includes(ext || ''))
+    return <FileText size={13} color="var(--text-tertiary)" />;
+  if (['.png', '.jpg', '.jpeg', '.svg', '.webp'].includes(ext || ''))
+    return <ImageIcon size={13} color="var(--lang-image)" />;
+  return <File size={13} color="var(--text-tertiary)" />;
+};
+
+/* ── FileTree row ───────────────────────────────────────────── */
+const FileTreeNode: React.FC<{ node: TreeNode }> = React.memo(({ node }) => {
+  const {
+    setActiveFile, activeFile,
+    expandedFolders, toggleFolder,
+    toggleFavorite, favorites
+  } = useRepositoryStore();
+
+  const isOpen     = expandedFolders[node.path] || false;
   const isSelected = activeFile?.path === node.file?.path;
-  const isFav = node.file ? favorites.find(f => f.path === node.file?.path) : false;
+  const isFav      = node.file ? favorites.some(f => f.path === node.file?.path) : false;
 
-  const getIcon = () => {
-    if (node.isDirectory) return isOpen || node.depth === 0 ? <ChevronDown size={14} /> : <ChevronRight size={14} />;
-    
-    const ext = node.file?.extension;
-    if (['.ts', '.tsx', '.js', '.jsx'].includes(ext || '')) return <FileCode2 size={14} color="var(--accent-blue)" />;
-    if (['.json', '.md'].includes(ext || '')) return <FileJson size={14} color="var(--color-success)" />;
-    if (['.png', '.jpg', '.svg'].includes(ext || '')) return <ImageIcon size={14} color="#8b5cf6" />;
-    return <File size={14} color="var(--text-tertiary)" />;
-  };
-
-  const handleToggle = () => {
+  const handleClick = () => {
     if (node.isDirectory) {
-      if (node.depth > 0) toggleFolder(node.path); // Don't toggle root
+      if (node.depth > 0) toggleFolder(node.path);
     } else if (node.file) {
       setActiveFile(node.file);
     }
   };
 
   return (
-    <div 
-      onClick={handleToggle}
-      style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '8px', 
-        padding: '6px 8px',
-        paddingLeft: `${node.depth * 14 + 10}px`,
-        cursor: 'pointer',
-        color: isSelected ? 'var(--accent-blue)' : 'var(--text-secondary)',
-        backgroundColor: isSelected ? 'var(--accent-blue-bg)' : 'transparent',
-        fontSize: '13px',
+    <div
+      role={node.file ? 'button' : undefined}
+      tabIndex={node.file ? 0 : undefined}
+      onClick={handleClick}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
+      aria-selected={isSelected}
+      aria-label={node.file ? `Open ${node.name}` : undefined}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-2)',
+        padding: '3px var(--space-4)',
+        paddingLeft: `${node.depth * 14 + 8}px`,
+        cursor: node.isDirectory && node.depth === 0 ? 'default' : 'pointer',
+        borderRadius: 'var(--radius-md)',
+        color: isSelected ? 'var(--accent-hover)' : 'var(--text-secondary)',
+        backgroundColor: isSelected ? 'var(--bg-selected)' : 'transparent',
+        fontSize: 'var(--text-xs)',
         userSelect: 'none',
+        transition: 'background var(--duration-fast), color var(--duration-fast)',
+        minHeight: 26,
+        outline: 'none',
+        marginLeft: 'var(--space-2)',
+        marginRight: 'var(--space-2)',
       }}
-      onMouseEnter={(e) => {
-        if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+      onMouseEnter={e => {
+        if (!isSelected) {
+          (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--bg-hover)';
+          (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)';
+        }
       }}
-      onMouseLeave={(e) => {
-        if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+      onMouseLeave={e => {
+        if (!isSelected) {
+          (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+          (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
+        }
       }}
     >
-      <span style={{ display: 'flex', alignItems: 'center', width: '16px', opacity: node.isDirectory ? 0.7 : 1 }}>
-        {getIcon()}
+      {/* Chevron or file icon */}
+      <span style={{ display: 'flex', alignItems: 'center', width: 14, flexShrink: 0, opacity: node.isDirectory ? 0.7 : 1 }}>
+        {node.isDirectory
+          ? (isOpen || node.depth === 0)
+            ? <ChevronDown size={12} />
+            : <ChevronRight size={12} />
+          : getFileIcon(node.file?.extension)
+        }
       </span>
-      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {node.name}
       </span>
+
+      {/* Star favorite button */}
       {!node.isDirectory && node.file && (
-        <span 
-          onClick={(e) => { e.stopPropagation(); toggleFavorite(node.file!); }}
-          style={{ 
-            opacity: isFav || isSelected ? 1 : 0,
+        <button
+          type="button"
+          aria-label={isFav ? `Remove ${node.name} from favorites` : `Add ${node.name} to favorites`}
+          onClick={e => { e.stopPropagation(); toggleFavorite(node.file!); }}
+          className="btn-icon btn-icon-sm"
+          style={{
+            opacity: isFav ? 1 : 0,
             color: isFav ? 'var(--color-warning)' : 'var(--text-tertiary)',
-            transition: 'opacity 150ms ease',
-            display: 'flex',
-            alignItems: 'center'
+            transition: 'opacity var(--duration-fast)',
+            flexShrink: 0,
           }}
-          className="favorite-btn"
+          tabIndex={-1}
         >
-          ★
-        </span>
+          <Star size={10} fill={isFav ? 'var(--color-warning)' : 'none'} />
+        </button>
       )}
     </div>
   );
 });
 
-export const Sidebar: React.FC = () => {
-  const { files, metadata, favorites, openFiles, setActiveFile, activeFile, closeFile, expandedFolders } = useRepositoryStore();
+/* ── Sidebar section header ─────────────────────────────────── */
+const SectionLabel: React.FC<{ label: string; count?: number }> = ({ label, count }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 'var(--space-6) var(--space-6) var(--space-2)',
+    }}
+  >
+    <span style={{
+      fontSize: 'var(--text-2xs)',
+      fontWeight: 'var(--weight-semibold)',
+      textTransform: 'uppercase',
+      letterSpacing: '0.07em',
+      color: 'var(--text-tertiary)',
+    }}>
+      {label}
+    </span>
+    {count !== undefined && (
+      <span className="badge badge-default" style={{ fontSize: 9, padding: '1px 4px' }}>{count}</span>
+    )}
+  </div>
+);
 
+/* ── Main Sidebar ───────────────────────────────────────────── */
+export const Sidebar: React.FC = () => {
+  const {
+    files, metadata, favorites, openFiles,
+    setActiveFile, activeFile, closeFile,
+    expandedFolders,
+  } = useRepositoryStore();
+
+  /* Build the flat visible tree (memoized) */
   const flatVisibleFiles = useMemo(() => {
     if (!metadata || files.length === 0) return [];
-    
-    // 1. Build nested tree
-    const root: TreeNode = { name: metadata.name, path: metadata.path, isDirectory: true, children: {}, depth: 0 };
+
+    const root: TreeNode = {
+      name: metadata.name, path: metadata.path,
+      isDirectory: true, children: {}, depth: 0,
+    };
     const rootPrefix = metadata.path;
 
     for (const file of files) {
       let rel = file.path.replace(rootPrefix, '');
       if (rel.startsWith('/')) rel = rel.substring(1);
-      if (rel === '') continue; // Skip root itself if included
+      if (rel === '') continue;
 
       const parts = rel.split('/');
       let current = root;
@@ -118,110 +195,168 @@ export const Sidebar: React.FC = () => {
       }
     }
 
-    // 2. Flatten based on expanded state
     const flat: TreeNode[] = [];
-    
     const traverse = (node: TreeNode) => {
       flat.push(node);
-      // Only traverse children if it's the root (depth 0, always expand) or it's expanded in state
       if (node.isDirectory && (node.depth === 0 || expandedFolders[node.path] === true)) {
         if (node.children) {
-          const childrenNodes = Object.values(node.children);
-          childrenNodes.sort((a, b) => {
+          const children = Object.values(node.children).sort((a, b) => {
             if (a.isDirectory && !b.isDirectory) return -1;
             if (!a.isDirectory && b.isDirectory) return 1;
             return a.name.localeCompare(b.name);
           });
-          for (const child of childrenNodes) {
-            traverse(child);
-          }
+          for (const child of children) traverse(child);
         }
       }
     };
-    
+
     traverse(root);
     return flat;
   }, [files, metadata, expandedFolders]);
 
   return (
-    <aside style={{
-      width: '300px',
-      backgroundColor: 'var(--bg-panel)',
-      borderRight: '1px solid var(--border-default)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden'
-    }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        
-        {/* OPEN EDITORS */}
-        {openFiles.length > 0 && (
-          <div style={{ marginBottom: '12px', flexShrink: 0 }}>
-            <div className="text-xs" style={{ padding: '16px 20px 8px 20px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.05em' }}>
-              Open Editors
-            </div>
-            <div style={{ padding: '0 10px', maxHeight: '150px', overflowY: 'auto' }}>
-              {openFiles.map(f => (
-                <div key={f.path} className="flex-between" style={{
-                  padding: '6px 8px',
-                  borderRadius: '6px',
-                  backgroundColor: activeFile?.path === f.path ? 'var(--bg-active)' : 'transparent',
-                  color: activeFile?.path === f.path ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  fontSize: '13px'
-                }}
-                onClick={() => setActiveFile(f)}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path.substring(f.path.lastIndexOf('/') + 1)}</span>
-                  <span onClick={(e) => { e.stopPropagation(); closeFile(f.path); }} style={{ cursor: 'pointer', opacity: 0.6 }}>×</span>
+    <aside
+      aria-label="File explorer"
+      style={{
+        width: 'var(--sidebar-width)',
+        backgroundColor: 'var(--bg-panel)',
+        borderRight: '1px solid var(--border-default)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        flexShrink: 0,
+      }}
+    >
+      {/* ── Open Editors ── */}
+      {openFiles.length > 0 && (
+        <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border-subtle)' }}>
+          <SectionLabel label="Open Editors" count={openFiles.length} />
+          <div style={{ padding: '0 var(--space-4)', maxHeight: 140, overflowY: 'auto' }}>
+            {openFiles.map(f => {
+              const isActive = activeFile?.path === f.path;
+              return (
+                <div
+                  key={f.path}
+                  onClick={() => setActiveFile(f)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter') setActiveFile(f); }}
+                  aria-label={`Switch to ${f.name}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 'var(--space-3)',
+                    padding: '3px var(--space-3)',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: isActive ? 'var(--bg-active)' : 'transparent',
+                    color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: 'var(--text-xs)',
+                    cursor: 'pointer',
+                    transition: 'background var(--duration-fast), color var(--duration-fast)',
+                    minHeight: 26,
+                  }}
+                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'; }}
+                  onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', overflow: 'hidden', flex: 1 }}>
+                    {getFileIcon(f.extension)}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`Close ${f.name}`}
+                    onClick={e => { e.stopPropagation(); closeFile(f.path); }}
+                    className="btn-icon btn-icon-sm"
+                    style={{ flexShrink: 0, color: 'var(--text-tertiary)', opacity: 0 }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.opacity = '1';
+                      (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)';
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.opacity = '0';
+                    }}
+                    tabIndex={-1}
+                  >
+                    <X size={10} />
+                  </button>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* FAVORITES */}
-        {favorites.length > 0 && (
-          <div style={{ marginBottom: '12px', flexShrink: 0 }}>
-            <div className="text-xs" style={{ padding: '16px 20px 8px 20px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.05em' }}>
-              Favorites
-            </div>
-            <div style={{ padding: '0 10px', maxHeight: '150px', overflowY: 'auto' }}>
-              {favorites.map(f => (
-                <div key={f.path} className="flex-between" style={{
-                  padding: '6px 8px',
-                  borderRadius: '6px',
-                  backgroundColor: activeFile?.path === f.path ? 'var(--accent-blue-bg)' : 'transparent',
-                  color: activeFile?.path === f.path ? 'var(--accent-blue)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  fontSize: '13px'
-                }}
-                onClick={() => setActiveFile(f)}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path.substring(f.path.lastIndexOf('/') + 1)}</span>
-                  <span style={{ color: 'var(--color-warning)' }}>★</span>
+      {/* ── Favorites ── */}
+      {favorites.length > 0 && (
+        <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border-subtle)' }}>
+          <SectionLabel label="Starred" count={favorites.length} />
+          <div style={{ padding: '0 var(--space-4)', maxHeight: 140, overflowY: 'auto' }}>
+            {favorites.map(f => {
+              const isActive = activeFile?.path === f.path;
+              return (
+                <div
+                  key={f.path}
+                  onClick={() => setActiveFile(f)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter') setActiveFile(f); }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    padding: '3px var(--space-3)',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: isActive ? 'var(--bg-selected)' : 'transparent',
+                    color: isActive ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                    fontSize: 'var(--text-xs)',
+                    cursor: 'pointer',
+                    transition: 'background var(--duration-fast), color var(--duration-fast)',
+                    minHeight: 26,
+                  }}
+                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'; }}
+                  onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                >
+                  <Star size={10} color="var(--color-warning)" fill="var(--color-warning)" style={{ flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    {f.name}
+                  </span>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* EXPLORER (Virtualized) */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <div className="text-xs" style={{ padding: '16px 20px 8px 20px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-tertiary)', letterSpacing: '0.05em', flexShrink: 0 }}>
-            Explorer
-          </div>
-          <div style={{ flex: 1, padding: '0 0px 20px 0px' }}>
-            {flatVisibleFiles.length > 0 ? (
-              <Virtuoso
-                style={{ height: '100%' }}
-                data={flatVisibleFiles}
-                itemContent={(_, node) => <FileTreeNode node={node} />}
-              />
-            ) : (
-              <div className="text-sm" style={{ padding: '20px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-                No repository loaded.
-              </div>
-            )}
-          </div>
+      {/* ── Explorer (Virtualized) ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <SectionLabel label="Explorer" count={files.filter(f => !f.isDirectory).length || undefined} />
+
+        <div style={{ flex: 1 }}>
+          {flatVisibleFiles.length > 0 ? (
+            <Virtuoso
+              style={{ height: '100%' }}
+              data={flatVisibleFiles}
+              itemContent={(_, node) => <FileTreeNode node={node} />}
+            />
+          ) : (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 'var(--space-20)',
+                gap: 'var(--space-4)',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <Layers size={24} style={{ opacity: 0.4 }} />
+              <span style={{ fontSize: 'var(--text-xs)', textAlign: 'center', lineHeight: 'var(--leading-relaxed)' }}>
+                Enter a repository path<br />to explore files
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </aside>

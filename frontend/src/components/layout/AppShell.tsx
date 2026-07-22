@@ -3,179 +3,371 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { CommandPalette } from './CommandPalette';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
-import { Loader2, AlertCircle, LayoutDashboard } from 'lucide-react';
-
+import {
+  Loader2, AlertCircle,
+  Network, GitBranch, BarChart2, FileCode,
+  FolderGit2, ArrowRight, Terminal, Zap
+} from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { SessionHistory } from './SessionHistory';
 import { CompareSnapshots } from '../insights/CompareSnapshots';
 import { saveSession } from '../../lib/sessionEngine';
 import { exportReportPdf } from '../../lib/exportEngine';
 import { computeInsights } from '../../lib/insightsEngine';
+import { useToast } from '../ui/Toast';
 
-const CodeViewer = React.lazy(() => import('../viewer/CodeViewer').then(m => ({ default: m.CodeViewer })));
-const DependencyGraphView = React.lazy(() => import('../graph/DependencyGraphView').then(m => ({ default: m.DependencyGraphView })));
-const GitGraphView = React.lazy(() => import('../graph/GitGraphView').then(m => ({ default: m.GitGraphView })));
-const InsightsDashboard = React.lazy(() => import('../insights/InsightsDashboard').then(m => ({ default: m.InsightsDashboard })));
+/* ── Lazy views ─────────────────────────────────────────────── */
+const CodeViewer = React.lazy(() =>
+  import('../viewer/CodeViewer').then(m => ({ default: m.CodeViewer }))
+);
+const DependencyGraphView = React.lazy(() =>
+  import('../graph/DependencyGraphView').then(m => ({ default: m.DependencyGraphView }))
+);
+const GitGraphView = React.lazy(() =>
+  import('../graph/GitGraphView').then(m => ({ default: m.GitGraphView }))
+);
+const InsightsDashboard = React.lazy(() =>
+  import('../insights/InsightsDashboard').then(m => ({ default: m.InsightsDashboard }))
+);
 
+/* ── Tab config ─────────────────────────────────────────────── */
+type Tab = 'code' | 'dependencies' | 'git' | 'insights';
+
+const TABS: { id: Tab; label: string; icon: React.ReactNode; description: string }[] = [
+  { id: 'code',         label: 'Code',          icon: <FileCode   size={13} />, description: 'Browse source files' },
+  { id: 'dependencies', label: 'Architecture',   icon: <Network    size={13} />, description: 'Dependency graph' },
+  { id: 'git',          label: 'Git Timeline',   icon: <GitBranch  size={13} />, description: 'Commit history' },
+  { id: 'insights',     label: 'Insights',       icon: <BarChart2  size={13} />, description: 'Health metrics' },
+];
+
+/* ── Loading spinner ─────────────────────────────────────────── */
+const LoadingView: React.FC<{ message?: string }> = ({ message = 'Loading…' }) => (
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100%',
+      gap: 'var(--space-4)',
+    }}
+  >
+    <Loader2 size={20} className="animate-spin" style={{ color: 'var(--accent)' }} />
+    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>{message}</span>
+  </div>
+);
+
+/* ── Empty state hero ────────────────────────────────────────── */
+const EmptyHero: React.FC = () => {
+  const FEATURE_ITEMS = [
+    { icon: <Network  size={16} />, title: 'AST Dependency Graph', desc: 'Interactive visualization of every import' },
+    { icon: <GitBranch size={16} />, title: 'Git Timeline',         desc: 'Full commit history with branch topology' },
+    { icon: <BarChart2 size={16} />, title: 'Insights Engine',      desc: 'Circular deps, hotspots, fan-in metrics' },
+    { icon: <FileCode  size={16} />, title: 'Code Viewer',          desc: 'Syntax-highlighted source exploration' },
+    { icon: <Zap       size={16} />, title: 'Session Persistence',  desc: 'IndexedDB snapshots, no re-analysis' },
+    { icon: <Terminal  size={16} />, title: 'Export Engine',        desc: 'PDF, Markdown, JSON, PNG, SVG' },
+  ];
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        padding: 'var(--space-20)',
+        gap: 'var(--space-16)',
+        animation: 'fade-in 400ms ease-out',
+      }}
+    >
+      {/* Hero */}
+      <div style={{ textAlign: 'center', maxWidth: 480 }}>
+        <div
+          style={{
+            width: 64, height: 64,
+            background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(129,140,248,0.08))',
+            border: '1px solid rgba(99,102,241,0.25)',
+            borderRadius: 'var(--radius-3xl)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto var(--space-8)',
+            boxShadow: '0 0 40px rgba(99,102,241,0.12)',
+          }}
+        >
+          <FolderGit2 size={28} color="var(--accent)" />
+        </div>
+
+        <h1
+          style={{
+            fontSize: 'var(--text-2xl)',
+            fontWeight: 'var(--weight-bold)',
+            color: 'var(--text-primary)',
+            letterSpacing: '-0.03em',
+            marginBottom: 'var(--space-4)',
+            lineHeight: 'var(--leading-tight)',
+          }}
+        >
+          Repository Intelligence
+        </h1>
+        <p style={{
+          fontSize: 'var(--text-sm)',
+          color: 'var(--text-tertiary)',
+          lineHeight: 'var(--leading-relaxed)',
+          marginBottom: 'var(--space-8)',
+        }}>
+          Enter an absolute path to any local Git repository in the bar above.
+          042-X will parse every file, extract dependencies, and reveal
+          the full structure of your codebase.
+        </p>
+
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            padding: 'var(--space-2) var(--space-5)',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-full)',
+            fontSize: 'var(--text-xs)',
+            color: 'var(--text-tertiary)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          <ArrowRight size={12} color="var(--accent)" />
+          /Users/your-username/your-project
+        </div>
+      </div>
+
+      {/* Feature grid */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 'var(--space-4)',
+          maxWidth: 600,
+          width: '100%',
+        }}
+      >
+        {FEATURE_ITEMS.map(item => (
+          <div
+            key={item.title}
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-xl)',
+              padding: 'var(--space-6)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-3)',
+              transition: 'border-color var(--duration-normal)',
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-strong)'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)'}
+          >
+            <span style={{ color: 'var(--accent)' }}>{item.icon}</span>
+            <div>
+              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)', marginBottom: 2 }}>
+                {item.title}
+              </div>
+              <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', lineHeight: 'var(--leading-relaxed)' }}>
+                {item.desc}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ── AppShell ───────────────────────────────────────────────── */
 export const AppShell: React.FC = () => {
   const store = useRepositoryStore();
-  const { isAnalyzing, error, metadata, activeTab, setActiveTab, setCommandPaletteOpen, activeFile, closeFile, files, dependencies, git } = store;
+  const {
+    isAnalyzing, error, metadata, activeTab, setActiveTab,
+    setCommandPaletteOpen, activeFile, closeFile,
+    files, dependencies, git, graphHighlightNode,
+  } = store;
+
+  const toast = useToast();
 
   React.useEffect(() => {
-    const handleGlobalKeys = (e: KeyboardEvent) => {
+    const handler = (e: KeyboardEvent) => {
+      // Cmd+K / Ctrl+K — Command Palette
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'p')) {
         e.preventDefault();
         setCommandPaletteOpen(true);
       }
+      // Cmd+W — Close active file tab
       if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
         e.preventDefault();
         if (activeFile) closeFile(activeFile.path);
       }
+      // Cmd+S — Save session
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
         if (metadata) {
           const insights = computeInsights(files, dependencies, git);
-          saveSession(metadata.name, metadata, files, dependencies, git, insights).then(() => {
-            alert('Session saved via shortcut!');
-          }).catch(console.error);
+          saveSession(metadata.name, metadata, files, dependencies, git, insights)
+            .then(() => toast.success('Session saved', `"${metadata.name}" snapshot stored locally.`))
+            .catch(() => toast.error('Save failed', 'Could not write to IndexedDB.'));
         }
       }
+      // Cmd+Shift+E — Export PDF
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
         e.preventDefault();
         if (metadata) {
           const insights = computeInsights(files, dependencies, git);
           exportReportPdf(metadata, insights);
+          toast.success('PDF exported', 'Architecture report downloaded.');
         }
       }
     };
-    window.addEventListener('keydown', handleGlobalKeys);
-    return () => window.removeEventListener('keydown', handleGlobalKeys);
-  }, [setCommandPaletteOpen, activeFile, closeFile, metadata, files, dependencies, git]);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [setCommandPaletteOpen, activeFile, closeFile, metadata, files, dependencies, git, toast]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateRows: '60px 1fr', height: '100vh', width: '100vw' }}>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'var(--header-height) 1fr',
+        height: '100vh',
+        width: '100vw',
+        overflow: 'hidden',
+      }}
+    >
       <Header />
-      
+
       <div style={{ display: 'flex', overflow: 'hidden' }}>
         <Sidebar />
-        
-        <main style={{ flex: 1, backgroundColor: 'var(--bg-app)', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          
-          <div className="flex-center" style={{ 
-            padding: '12px 20px', 
-            backgroundColor: 'var(--bg-panel)',
-            borderBottom: '1px solid var(--border-default)' 
-          }}>
-            <div style={{ 
-              display: 'flex', 
-              backgroundColor: 'var(--bg-app)', 
-              padding: '4px', 
-              borderRadius: '8px',
-              border: '1px solid var(--border-subtle)'
-            }}>
-              <button 
-                onClick={() => setActiveTab('code')}
-                className="text-sm"
-                style={{ 
-                  padding: '6px 16px', 
-                  borderRadius: '6px',
-                  background: activeTab === 'code' ? 'var(--bg-active)' : 'transparent', 
-                  color: activeTab === 'code' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  fontWeight: activeTab === 'code' ? 500 : 400,
-                  cursor: 'pointer',
-                  transition: 'all 150ms ease-out'
-                }}
-              >
-                Code Viewer
-              </button>
-              <button 
-                onClick={() => setActiveTab('dependencies')}
-                className="text-sm"
-                style={{ 
-                  padding: '6px 16px', 
-                  borderRadius: '6px',
-                  background: activeTab === 'dependencies' ? 'var(--bg-active)' : 'transparent', 
-                  color: activeTab === 'dependencies' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  fontWeight: activeTab === 'dependencies' ? 500 : 400,
-                  cursor: 'pointer',
-                  transition: 'all 150ms ease-out'
-                }}
-              >
-                Architecture Graph
-              </button>
-              <button 
-                onClick={() => setActiveTab('git')}
-                className="text-sm"
-                style={{ 
-                  padding: '6px 16px', 
-                  borderRadius: '6px',
-                  background: activeTab === 'git' ? 'var(--bg-active)' : 'transparent', 
-                  color: activeTab === 'git' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  fontWeight: activeTab === 'git' ? 500 : 400,
-                  cursor: 'pointer',
-                  transition: 'all 150ms ease-out'
-                }}
-              >
-                Git Timeline
-              </button>
-              <button 
-                onClick={() => setActiveTab('insights')}
-                className="text-sm"
-                style={{ 
-                  padding: '6px 16px', 
-                  borderRadius: '6px',
-                  background: activeTab === 'insights' ? 'var(--bg-active)' : 'transparent', 
-                  color: activeTab === 'insights' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  fontWeight: activeTab === 'insights' ? 500 : 400,
-                  cursor: 'pointer',
-                  transition: 'all 150ms ease-out'
-                }}
-              >
-                Insights
-              </button>
+
+        <main
+          style={{
+            flex: 1,
+            backgroundColor: 'var(--bg-app)',
+            position: 'relative',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {/* ── Tab Bar ── */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 'var(--space-3) var(--space-8)',
+              backgroundColor: 'var(--bg-panel)',
+              borderBottom: '1px solid var(--border-default)',
+              flexShrink: 0,
+            }}
+          >
+            <div className="tab-bar">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`tab-btn${activeTab === tab.id ? ' tab-btn-active' : ''}`}
+                  title={tab.description}
+                  aria-label={tab.label}
+                  aria-selected={activeTab === tab.id}
+                  disabled={!metadata && !isAnalyzing}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
             </div>
           </div>
 
+          {/* ── Content Area ── */}
           <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            {!metadata && !isAnalyzing && !error && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
-                <div style={{ padding: '24px', backgroundColor: 'var(--bg-surface)', borderRadius: '16px', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)' }}>
-                  <LayoutDashboard size={48} style={{ marginBottom: '16px', opacity: 0.5, color: 'var(--text-secondary)' }} />
-                  <h2 className="text-lg" style={{ color: 'var(--text-primary)', marginBottom: '8px', fontWeight: 500 }}>No Repository Loaded</h2>
-                  <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Enter an absolute path in the top bar to begin analysis.</p>
+
+            {/* Empty state — no repo loaded */}
+            {!metadata && !isAnalyzing && !error && <EmptyHero />}
+
+            {/* Analyzing */}
+            {isAnalyzing && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  gap: 'var(--space-6)',
+                  animation: 'fade-in 200ms ease-out',
+                }}
+              >
+                <Loader2 size={28} className="animate-spin" style={{ color: 'var(--accent)' }} />
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: 'var(--text-base)', fontWeight: 'var(--weight-medium)', color: 'var(--text-primary)', marginBottom: 'var(--space-2)' }}>
+                    Analyzing Repository…
+                  </p>
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+                    Parsing ASTs and reading git history in parallel
+                  </p>
                 </div>
               </div>
             )}
 
-            {isAnalyzing ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
-                <Loader2 size={24} className="animate-spin" style={{ marginBottom: '12px', color: 'var(--accent-blue)' }} />
-                <p className="text-sm">Analyzing Architecture...</p>
-              </div>
-            ) : error ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--color-danger)' }}>
-                <div style={{ padding: '24px', backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <AlertCircle size={32} style={{ marginBottom: '12px' }} />
-                  <p className="text-base" style={{ fontWeight: 500, marginBottom: '4px' }}>Analysis Failed</p>
-                  <p className="text-sm" style={{ opacity: 0.8 }}>{error}</p>
+            {/* Error state */}
+            {error && !isAnalyzing && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  padding: 'var(--space-20)',
+                }}
+              >
+                <div
+                  style={{
+                    background: 'var(--color-danger-subtle)',
+                    border: '1px solid var(--color-danger-border)',
+                    borderRadius: 'var(--radius-2xl)',
+                    padding: 'var(--space-10) var(--space-12)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 'var(--space-4)',
+                    maxWidth: 400,
+                    textAlign: 'center',
+                  }}
+                >
+                  <AlertCircle size={28} color="var(--color-danger)" />
+                  <div>
+                    <p style={{ fontSize: 'var(--text-base)', fontWeight: 'var(--weight-semibold)', color: 'var(--color-danger)', marginBottom: 'var(--space-2)' }}>
+                      Analysis Failed
+                    </p>
+                    <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', lineHeight: 'var(--leading-relaxed)' }}>
+                      {error}
+                    </p>
+                  </div>
                 </div>
               </div>
-            ) : metadata ? (
-              <Suspense fallback={
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
-                  <Loader2 size={24} className="animate-spin" style={{ marginBottom: '12px', color: 'var(--accent-blue)' }} />
-                  <p className="text-sm">Loading Module...</p>
-                </div>
-              }>
-                {activeTab === 'code' && <CodeViewer />}
-                {activeTab === 'dependencies' && <DependencyGraphView />}
-                {activeTab === 'git' && <GitGraphView />}
-                {activeTab === 'insights' && <InsightsDashboard />}
+            )}
+
+            {/* Main views */}
+            {!isAnalyzing && !error && metadata && (
+              <Suspense fallback={<LoadingView message="Loading module…" />}>
+                {activeTab === 'code'         && <CodeViewer />}
+                {activeTab === 'dependencies' && <DependencyGraphView externalHighlight={graphHighlightNode} />}
+                {activeTab === 'git'          && <GitGraphView />}
+                {activeTab === 'insights'     && <InsightsDashboard />}
               </Suspense>
-            ) : null}
+            )}
           </div>
         </main>
       </div>
+
+      {/* ── Global Modals ── */}
       <CommandPalette />
       <SettingsModal />
       <SessionHistory />

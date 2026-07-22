@@ -1,12 +1,45 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
-import { Search, FileCode2, FileJson, Image as ImageIcon, File } from 'lucide-react';
+import {
+  Search, FileCode2, FileJson, Image as ImageIcon,
+  File, FileText, Command
+} from 'lucide-react';
+
+const getFileIcon = (ext?: string): React.ReactNode => {
+  if (['.ts', '.tsx'].includes(ext || '')) return <FileCode2 size={14} color="var(--lang-ts)" />;
+  if (['.js', '.jsx'].includes(ext || '')) return <FileCode2 size={14} color="var(--lang-js)" />;
+  if (['.json'].includes(ext || ''))       return <FileJson  size={14} color="var(--lang-json)" />;
+  if (['.md', '.mdx'].includes(ext || '')) return <FileText  size={14} color="var(--text-tertiary)" />;
+  if (['.png', '.jpg', '.svg', '.webp'].includes(ext || '')) return <ImageIcon size={14} color="var(--lang-image)" />;
+  return <File size={14} color="var(--text-tertiary)" />;
+};
+
+const highlightMatch = (text: string, query: string) => {
+  if (!query) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark style={{ background: 'var(--accent-subtle)', color: 'var(--accent-hover)', borderRadius: 2 }}>
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+};
+
 export const CommandPalette: React.FC = () => {
   const { commandPaletteOpen, setCommandPaletteOpen, files, setActiveFile } = useRepositoryStore();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const filteredFiles = files
+    .filter(f => !f.isDirectory && f.path.toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 50);
+
   useEffect(() => {
     if (commandPaletteOpen) {
       setQuery('');
@@ -15,103 +48,214 @@ export const CommandPalette: React.FC = () => {
     }
   }, [commandPaletteOpen]);
 
-  const filteredFiles = files.filter(f => !f.isDirectory && f.path.toLowerCase().includes(query.toLowerCase())).slice(0, 50);
+  useEffect(() => { setSelectedIndex(0); }, [query]);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    const el = listRef.current?.children[selectedIndex] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [selectedIndex]);
 
   useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handler = (e: KeyboardEvent) => {
       if (!commandPaletteOpen) return;
-      
-      if (e.key === 'Escape') {
-        setCommandPaletteOpen(false);
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex(prev => Math.min(prev + 1, filteredFiles.length - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex(prev => Math.max(prev - 1, 0));
-      } else if (e.key === 'Enter' && filteredFiles[selectedIndex]) {
+      if (e.key === 'Escape')     { setCommandPaletteOpen(false); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(p => Math.min(p + 1, filteredFiles.length - 1)); }
+      else if (e.key === 'ArrowUp')   { e.preventDefault(); setSelectedIndex(p => Math.max(p - 1, 0)); }
+      else if (e.key === 'Enter' && filteredFiles[selectedIndex]) {
         setActiveFile(filteredFiles[selectedIndex]);
         setCommandPaletteOpen(false);
       }
     };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [commandPaletteOpen, filteredFiles, selectedIndex, setActiveFile, setCommandPaletteOpen]);
 
   if (!commandPaletteOpen) return null;
 
-  const getIcon = (ext?: string) => {
-    if (['.ts', '.tsx', '.js', '.jsx'].includes(ext || '')) return <FileCode2 size={16} color="var(--accent-blue)" />;
-    if (['.json', '.md'].includes(ext || '')) return <FileJson size={16} color="var(--color-success)" />;
-    if (['.png', '.jpg', '.svg'].includes(ext || '')) return <ImageIcon size={16} color="#8b5cf6" />;
-    return <File size={16} color="var(--text-tertiary)" />;
+  const dirOf = (path: string) => {
+    const i = path.lastIndexOf('/');
+    return i > -1 ? path.slice(0, i) : '';
   };
+  const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'flex-start',
-      paddingTop: '15vh',
-      zIndex: 1000,
-    }} onClick={() => setCommandPaletteOpen(false)}>
-      <div 
-        className="glass-panel"
-        style={{ width: '600px', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-panel)' }}
+    <div
+      className="modal-overlay"
+      style={{ paddingTop: '14vh', alignItems: 'flex-start' }}
+      onClick={() => setCommandPaletteOpen(false)}
+      role="dialog"
+      aria-modal="true"
+      aria-label="File search"
+    >
+      <div
+        className="modal-sheet animate-slide-up"
+        style={{ width: 580 }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid var(--border-default)' }}>
-          <Search size={20} color="var(--text-secondary)" style={{ marginRight: '12px' }} />
-          <input 
+        {/* Search Input */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-4)',
+            padding: 'var(--space-4) var(--space-6)',
+            borderBottom: '1px solid var(--border-default)',
+          }}
+        >
+          <Search size={16} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+          <input
             ref={inputRef}
-            type="text" 
-            placeholder="Search files by name... (Cmd+P)"
+            type="text"
+            placeholder="Search files…"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            style={{ flex: 1, fontSize: '16px', color: 'var(--text-primary)', background: 'transparent', outline: 'none', border: 'none' }}
+            role="combobox"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-controls="palette-results"
+            style={{
+              flex: 1,
+              fontSize: 'var(--text-base)',
+              color: 'var(--text-primary)',
+              background: 'transparent',
+              outline: 'none',
+              border: 'none',
+              fontFamily: 'var(--font-sans)',
+            }}
           />
-          <div className="text-xs" style={{ color: 'var(--text-tertiary)', border: '1px solid var(--border-subtle)', padding: '2px 6px', borderRadius: '4px' }}>ESC</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>
+            <kbd className="kbd" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Command size={9} />K
+            </kbd>
+            <kbd className="kbd">ESC</kbd>
+          </div>
         </div>
 
-        <div style={{ maxHeight: '400px', overflowY: 'auto', padding: '8px 0' }}>
-          {filteredFiles.length === 0 ? (
-            <div className="text-sm" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-tertiary)' }}>No files found.</div>
+        {/* Results */}
+        <div
+          ref={listRef}
+          id="palette-results"
+          role="listbox"
+          style={{
+            maxHeight: 380,
+            overflowY: 'auto',
+            padding: 'var(--space-2)',
+          }}
+        >
+          {files.filter(f => !f.isDirectory).length === 0 ? (
+            <div
+              style={{
+                padding: 'var(--space-16)',
+                textAlign: 'center',
+                color: 'var(--text-tertiary)',
+                fontSize: 'var(--text-sm)',
+              }}
+            >
+              No repository loaded. Enter a path in the header to begin.
+            </div>
+          ) : filteredFiles.length === 0 ? (
+            <div
+              style={{
+                padding: 'var(--space-16)',
+                textAlign: 'center',
+                color: 'var(--text-tertiary)',
+                fontSize: 'var(--text-sm)',
+              }}
+            >
+              No files match "{query}"
+            </div>
           ) : (
-            filteredFiles.map((f, i) => (
-              <div 
-                key={f.path}
-                className="flex-between"
-                onClick={() => { setActiveFile(f); setCommandPaletteOpen(false); }}
-                style={{
-                  padding: '12px 20px',
-                  backgroundColor: i === selectedIndex ? 'var(--accent-blue-bg)' : 'transparent',
-                  color: i === selectedIndex ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={() => setSelectedIndex(i)}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
-                  {getIcon(f.extension)}
-                  <span className="text-sm" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {f.path.substring(f.path.lastIndexOf('/') + 1)}
-                  </span>
+            filteredFiles.map((f, i) => {
+              const isSelected = i === selectedIndex;
+              const dir  = dirOf(f.path);
+              const name = nameOf(f.path);
+              return (
+                <div
+                  key={f.path}
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => { setActiveFile(f); setCommandPaletteOpen(false); }}
+                  onMouseEnter={() => setSelectedIndex(i)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 'var(--space-4)',
+                    padding: 'var(--space-3) var(--space-5)',
+                    borderRadius: 'var(--radius-lg)',
+                    backgroundColor: isSelected ? 'var(--bg-selected)' : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'background var(--duration-fast)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', overflow: 'hidden', flex: 1 }}>
+                    <span style={{ flexShrink: 0 }}>{getFileIcon(f.extension)}</span>
+                    <span
+                      style={{
+                        fontSize: 'var(--text-sm)',
+                        fontWeight: 'var(--weight-medium)',
+                        color: isSelected ? 'var(--accent-hover)' : 'var(--text-primary)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {highlightMatch(name, query)}
+                    </span>
+                    {dir && (
+                      <span
+                        style={{
+                          fontSize: 'var(--text-xs)',
+                          color: 'var(--text-tertiary)',
+                          fontFamily: 'var(--font-mono)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {dir}
+                      </span>
+                    )}
+                  </div>
+                  {f.extension && (
+                    <span className="badge badge-default" style={{ flexShrink: 0 }}>
+                      {f.extension.slice(1)}
+                    </span>
+                  )}
                 </div>
-                <span className="text-xs" style={{ color: 'var(--text-tertiary)', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {f.path}
-                </span>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
+
+        {/* Footer */}
+        {filteredFiles.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-6)',
+              padding: 'var(--space-3) var(--space-6)',
+              borderTop: '1px solid var(--border-subtle)',
+            }}
+          >
+            {[
+              { keys: ['↑', '↓'], label: 'Navigate' },
+              { keys: ['↵'], label: 'Open' },
+              { keys: ['Esc'], label: 'Close' },
+            ].map(({ keys, label }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                {keys.map(k => <kbd key={k} className="kbd">{k}</kbd>)}
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>{label}</span>
+              </div>
+            ))}
+            <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+              {filteredFiles.length} result{filteredFiles.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

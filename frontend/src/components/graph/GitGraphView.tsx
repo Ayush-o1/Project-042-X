@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  ReactFlow, 
+import React, { useEffect, useState, useMemo } from 'react';
+import {
+  ReactFlow,
   ReactFlowProvider,
-  Background, 
-  MiniMap, 
-  useNodesState, 
+  Background,
+  MiniMap,
+  useNodesState,
   useEdgesState,
   useReactFlow,
   Panel
@@ -14,101 +14,262 @@ import '@xyflow/react/dist/style.css';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { getGitDagreLayout } from './layoutUtils';
 import { CommitNode } from './CommitNode';
-import { Search, ZoomIn, ZoomOut, Maximize, Target } from 'lucide-react';
+import { Search, ZoomIn, ZoomOut, Maximize, GitBranch, Filter, X, Users, ChevronDown } from 'lucide-react';
 
-const nodeTypes = {
-  commitNode: CommitNode,
+// Deterministic author color
+const AUTHOR_PALETTE = [
+  '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6'
+];
+
+function hashAuthor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+  return AUTHOR_PALETTE[Math.abs(h) % AUTHOR_PALETTE.length];
+}
+
+// Extended CommitNode wrapper so we can pass onOpenFile
+const CommitNodeWrapper = (props: any) => {
+  const { setActiveFile, files } = useRepositoryStore();
+  const handleOpenFile = (relativePath: string) => {
+    // Try to match relative path against absolute file paths
+    const fileModel = files.find(f => f.path.endsWith(relativePath) || f.name === relativePath.split('/').pop());
+    if (fileModel) setActiveFile(fileModel);
+  };
+  return <CommitNode {...props} onOpenFile={handleOpenFile} />;
 };
 
-const CustomToolbar = ({ nodes, onSearch }: { nodes: Node[], onSearch: (id: string) => void }) => {
+const nodeTypes = { commitNode: CommitNodeWrapper };
+
+/* ── Git Toolbar ──────────────────────────────────────────────────── */
+const GitToolbar = ({
+  nodes,
+  onSearch,
+  authors,
+  selectedAuthor,
+  onAuthorChange,
+  dateFrom,
+  dateTo,
+  onDateFromChange,
+  onDateToChange,
+}: {
+  nodes: Node[];
+  onSearch: (id: string) => void;
+  authors: string[];
+  selectedAuthor: string;
+  onAuthorChange: (a: string) => void;
+  dateFrom: string;
+  dateTo: string;
+  onDateFromChange: (d: string) => void;
+  onDateToChange: (d: string) => void;
+}) => {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const [query, setQuery] = useState('');
+  const [focused, setFocused] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    const found = nodes.find(n => 
-      n.id.toLowerCase().includes(query.toLowerCase()) || 
-      (n.data.message as string).toLowerCase().includes(query.toLowerCase())
+    const found = nodes.find(n =>
+      n.id.toLowerCase().includes(query.toLowerCase()) ||
+      ((n.data.message as string) || '').toLowerCase().includes(query.toLowerCase())
     );
-    if (found) {
-      onSearch(found.id);
-    }
+    if (found) onSearch(found.id);
   };
 
+  const iconBtn = (onClick: () => void, icon: React.ReactNode, label: string, active = false) => (
+    <button type="button" onClick={onClick} title={label} aria-label={label} className="btn-icon btn-icon-md" style={{ color: active ? 'var(--accent)' : 'var(--text-tertiary)' }}>
+      {icon}
+    </button>
+  );
+
+  const hasActiveFilters = selectedAuthor !== '' || dateFrom !== '' || dateTo !== '';
+
   return (
-    <Panel position="top-right" className="glass-panel" style={{ 
-      display: 'flex', gap: '8px', padding: '8px', borderRadius: '8px', 
-      backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-default)',
-      margin: '16px'
-    }}>
-      <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-app)', padding: '4px 8px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-        <Search size={14} color="var(--text-tertiary)" style={{ marginRight: '6px' }} />
-        <input 
-          type="text" 
-          placeholder="Find commit..." 
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          className="text-xs"
-          style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', width: '120px' }}
-        />
-      </form>
-      <div style={{ width: '1px', backgroundColor: 'var(--border-default)', margin: '0 4px' }} />
-      <button onClick={() => zoomIn({ duration: 800 })} style={{ padding: '6px', cursor: 'pointer', color: 'var(--text-secondary)', background: 'transparent' }}><ZoomIn size={16} /></button>
-      <button onClick={() => zoomOut({ duration: 800 })} style={{ padding: '6px', cursor: 'pointer', color: 'var(--text-secondary)', background: 'transparent' }}><ZoomOut size={16} /></button>
-      <button onClick={() => fitView({ duration: 800 })} style={{ padding: '6px', cursor: 'pointer', color: 'var(--text-secondary)', background: 'transparent' }}><Maximize size={16} /></button>
+    <Panel position="top-right" style={{ margin: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      <div className="graph-toolbar">
+        <form onSubmit={handleSearch} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <Search size={13} style={{ position: 'absolute', left: 8, color: focused ? 'var(--accent)' : 'var(--text-tertiary)', transition: 'color var(--duration-fast)', pointerEvents: 'none' }} />
+          <input type="text" placeholder="Search commits…" value={query} onChange={e => setQuery(e.target.value)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} aria-label="Search git commits" className="graph-search-input" />
+        </form>
+        <div style={{ width: 1, height: 20, background: 'var(--border-default)' }} />
+        {iconBtn(() => zoomIn({ duration: 800 }), <ZoomIn size={15} />, 'Zoom in')}
+        {iconBtn(() => zoomOut({ duration: 800 }), <ZoomOut size={15} />, 'Zoom out')}
+        {iconBtn(() => fitView({ duration: 800 }), <Maximize size={15} />, 'Fit view')}
+        <div style={{ width: 1, height: 20, background: 'var(--border-default)' }} />
+        <div style={{ position: 'relative' }}>
+          {iconBtn(() => setFilterOpen(v => !v), <Filter size={15} />, 'Filters', filterOpen || hasActiveFilters)}
+          {hasActiveFilters && (
+            <div style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
+          )}
+        </div>
+      </div>
+
+      {/* Filter panel */}
+      {filterOpen && (
+        <div style={{
+          background: 'var(--bg-panel)', border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-xl)',
+          padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)',
+          minWidth: 240, animation: 'slide-up var(--duration-fast) var(--ease-default)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)' }}>Git Filters</span>
+            {hasActiveFilters && (
+              <button type="button" onClick={() => { onAuthorChange(''); onDateFromChange(''); onDateToChange(''); }} style={{ fontSize: 'var(--text-2xs)', color: 'var(--accent)', background: 'transparent', cursor: 'pointer' }}>
+                Clear all
+              </button>
+            )}
+          </div>
+
+          {/* Author filter */}
+          {authors.length > 0 && (
+            <div>
+              <label style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 'var(--space-2)' }}>
+                <Users size={10} /> Author
+              </label>
+              <div style={{ position: 'relative' }}>
+                <select
+                  value={selectedAuthor}
+                  onChange={e => onAuthorChange(e.target.value)}
+                  style={{
+                    width: '100%', padding: 'var(--space-2) var(--space-3)',
+                    background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+                    borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
+                    fontSize: 'var(--text-xs)', cursor: 'pointer', appearance: 'none', paddingRight: 'var(--space-8)',
+                  }}
+                >
+                  <option value="">All authors</option>
+                  {authors.map(a => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+                <ChevronDown size={12} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
+              </div>
+              {selectedAuthor && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: hashAuthor(selectedAuthor) }} />
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>{selectedAuthor}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Date range */}
+          <div>
+            <label style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 'var(--space-2)' }}>
+              Date Range
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', minWidth: 24 }}>From</span>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => onDateFromChange(e.target.value)}
+                  style={{ flex: 1, padding: '3px 8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: 'var(--text-xs)', cursor: 'pointer' }}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', minWidth: 24 }}>To</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={e => onDateToChange(e.target.value)}
+                  style={{ flex: 1, padding: '3px 8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: 'var(--text-xs)', cursor: 'pointer' }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Panel>
   );
 };
 
+/* ── Flow wrapper ──────────────────────────────────────────────────── */
 const FlowWrapper: React.FC = () => {
   const { git } = useRepositoryStore();
   const { setCenter } = useReactFlow();
-  
+
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (git && git.commits) {
-      const { nodes: layoutedNodes, edges: layoutedEdges } = getGitDagreLayout(git, 'TB');
-      setNodes(layoutedNodes);
-      setEdges(layoutedEdges);
-    }
-  }, [git, setNodes, setEdges]);
+  // Filter state
+  const [selectedAuthor, setSelectedAuthor] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
-  // Compute highlighting logic
-  // CRITICAL: Do NOT include `edges` (local state) in deps — that causes an infinite loop
-  // because the effect mutates edges via setEdges, which would re-trigger the effect.
-  // Instead, compute connectivity from the stable `git` store data.
+  // All unique authors
+  const authors = useMemo(() => {
+    if (!git) return [];
+    const authorSet = new Set<string>();
+    git.commits.forEach(c => { if (c.author) authorSet.add(c.author); });
+    return Array.from(authorSet).sort();
+  }, [git]);
+
+  // Filtered commits
+  const filteredCommits = useMemo(() => {
+    if (!git) return [];
+    return git.commits.filter(c => {
+      if (selectedAuthor && c.author !== selectedAuthor) return false;
+      if (dateFrom || dateTo) {
+        const ts = (c as any).timestamp ?? (c as any).date;
+        if (ts) {
+          const commitDate = ts.split('T')[0];
+          if (dateFrom && commitDate < dateFrom) return false;
+          if (dateTo && commitDate > dateTo) return false;
+        }
+      }
+      return true;
+    });
+  }, [git, selectedAuthor, dateFrom, dateTo]);
+
+  // Rebuild layout when filtered commits change
+  useEffect(() => {
+    if (filteredCommits.length > 0) {
+      const { nodes: ln, edges: le } = getGitDagreLayout({ commits: filteredCommits }, 'TB');
+      // Inject author color and filesChanged into node data
+      const enrichedNodes = ln.map(n => ({
+        ...n,
+        data: {
+          ...n.data,
+          authorColor: hashAuthor(n.data.author as string || ''),
+          filesChanged: filteredCommits.find(c => c.hash === n.id)?.filesChanged || [],
+        },
+      }));
+      setNodes(enrichedNodes);
+      setEdges(le);
+    } else {
+      setNodes([]);
+      setEdges([]);
+    }
+  }, [filteredCommits, setNodes, setEdges]);
+
+  // BFS highlight
   useEffect(() => {
     if (!hoveredNode) {
       setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, dimmed: false } })));
-      setEdges(eds => eds.map(e => ({ 
-        ...e, 
-        style: { stroke: 'var(--border-focus)', strokeWidth: 1.5, opacity: 1 },
-        animated: false
+      setEdges(eds => eds.map(e => ({
+        ...e,
+        animated: false,
+        style: { stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1.5, opacity: 1 },
       })));
       return;
     }
 
-    // Build connected set from the stable git store data (not the local edges state)
-    const connectedNodeIds = new Set<string>([hoveredNode]);
+    const connected = new Set<string>([hoveredNode]);
     if (git) {
-      git.commits.forEach(commit => {
-        // A commit is "connected" to hoveredNode if it is a direct parent or child
-        if (commit.hash === hoveredNode) {
-          commit.parents.forEach(p => connectedNodeIds.add(p));
-        }
-        if (commit.parents.includes(hoveredNode)) {
-          connectedNodeIds.add(commit.hash);
-        }
+      filteredCommits.forEach(commit => {
+        if (commit.hash === hoveredNode) commit.parents.forEach(p => connected.add(p));
+        if (commit.parents.includes(hoveredNode)) connected.add(commit.hash);
       });
     }
 
     setNodes(nds => nds.map(n => ({
       ...n,
-      data: { ...n.data, dimmed: !connectedNodeIds.has(n.id) && n.id !== hoveredNode }
+      data: { ...n.data, dimmed: !connected.has(n.id) && n.id !== hoveredNode },
     })));
 
     setEdges(eds => eds.map(e => {
@@ -117,14 +278,14 @@ const FlowWrapper: React.FC = () => {
         ...e,
         animated: isConnected,
         style: {
-          stroke: isConnected ? 'var(--accent-blue)' : 'var(--border-focus)',
-          strokeWidth: isConnected ? 2 : 1.5,
-          opacity: isConnected ? 1 : 0.1,
-          transition: 'all 300ms ease'
-        }
+          stroke: isConnected ? 'var(--accent)' : 'rgba(255,255,255,0.04)',
+          strokeWidth: isConnected ? 2.5 : 1,
+          opacity: isConnected ? 1 : 0.08,
+          transition: 'all 250ms ease',
+        },
       };
     }));
-  }, [hoveredNode, git, setNodes, setEdges]);
+  }, [hoveredNode, git, filteredCommits, setNodes, setEdges]);
 
   const handleSearchFocus = (nodeId: string) => {
     const node = nodes.find(n => n.id === nodeId);
@@ -136,18 +297,54 @@ const FlowWrapper: React.FC = () => {
 
   if (!git) {
     return (
-      <div className="flex-center" style={{ height: '100%', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ padding: '24px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: '12px', textAlign: 'center' }}>
-          <Target size={32} color="var(--text-tertiary)" style={{ margin: '0 auto 12px' }} />
-          <h3 className="text-primary font-semibold">No Git Data</h3>
-          <p className="text-secondary text-sm mt-2">Analyze a repository to view its Git history.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 'var(--space-6)' }}>
+        <div style={{ width: 56, height: 56, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-2xl)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <GitBranch size={24} style={{ opacity: 0.3 }} />
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>No Git History</p>
+          <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+            Analyze a repository with a valid <code style={{ fontFamily: 'var(--font-mono)' }}>.git</code> directory.
+          </p>
         </div>
       </div>
     );
   }
 
+  const shownCount = filteredCommits.length;
+  const totalCount = git.commits.length;
+
   return (
     <>
+      {/* Filter status bar */}
+      {(selectedAuthor || dateFrom || dateTo) && (
+        <div style={{
+          position: 'absolute', top: 'var(--space-5)', left: 'var(--space-5)',
+          zIndex: 10, display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+          padding: 'var(--space-2) var(--space-4)',
+          background: 'var(--bg-panel)', border: '1px solid var(--border-focus)',
+          borderRadius: 'var(--radius-full)', boxShadow: 'var(--shadow-md)',
+          animation: 'slide-up var(--duration-fast) var(--ease-default)',
+        }}>
+          {selectedAuthor && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: hashAuthor(selectedAuthor) }} />
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-primary)' }}>{selectedAuthor}</span>
+            </div>
+          )}
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+            {shownCount} of {totalCount} commits
+          </span>
+          <button
+            type="button"
+            onClick={() => { setSelectedAuthor(''); setDateFrom(''); setDateTo(''); }}
+            style={{ color: 'var(--text-tertiary)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -163,24 +360,36 @@ const FlowWrapper: React.FC = () => {
         minZoom={0.05}
         maxZoom={2}
       >
-        <Background color="var(--border-focus)" gap={24} />
-        <CustomToolbar nodes={nodes} onSearch={handleSearchFocus} />
-        <MiniMap 
-          nodeColor="var(--border-focus)" 
-          maskColor="rgba(0, 0, 0, 0.7)" 
-          style={{ backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-default)', borderRadius: '8px' }} 
+        <Background color="rgba(255,255,255,0.04)" gap={20} size={1} />
+        <GitToolbar
+          nodes={nodes}
+          onSearch={handleSearchFocus}
+          authors={authors}
+          selectedAuthor={selectedAuthor}
+          onAuthorChange={setSelectedAuthor}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+        />
+        <MiniMap
+          nodeColor={n => {
+            const author = n.data?.author as string || '';
+            return author ? hashAuthor(author) : 'var(--accent)';
+          }}
+          maskColor="rgba(0, 0, 0, 0.7)"
+          style={{ backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-xl)' }}
         />
       </ReactFlow>
     </>
   );
 };
 
-export const GitGraphView: React.FC = () => {
-  return (
-    <div style={{ height: '100%', width: '100%', backgroundColor: 'var(--bg-app)' }}>
-      <ReactFlowProvider>
-        <FlowWrapper />
-      </ReactFlowProvider>
-    </div>
-  );
-};
+/* ── Export ────────────────────────────────────────────────────────── */
+export const GitGraphView: React.FC = () => (
+  <div style={{ height: '100%', width: '100%', backgroundColor: 'var(--bg-app)', position: 'relative' }}>
+    <ReactFlowProvider>
+      <FlowWrapper />
+    </ReactFlowProvider>
+  </div>
+);

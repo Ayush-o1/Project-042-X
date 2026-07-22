@@ -22,6 +22,9 @@ interface RepositoryState {
   isFileLoading: boolean;
   activeTab: 'code' | 'dependencies' | 'git' | 'insights';
 
+  // Deep-link: highlight a specific node in the dependency graph
+  graphHighlightNode: string | null;
+
   // DX State
   favorites: FileModel[];
   recentFiles: FileModel[];
@@ -44,6 +47,8 @@ interface RepositoryState {
   setSessionHistoryOpen: (isOpen: boolean) => void;
   setCompareModalOpen: (isOpen: boolean) => void;
   loadSessionIntoStore: (session: any) => void;
+  /** Navigate to the dependency graph and highlight a specific node */
+  navigateToGraphNode: (nodeId: string) => void;
 }
 
 export const useRepositoryStore = create<RepositoryState>((set, get) => ({
@@ -65,6 +70,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   activeFileContent: null,
   isFileLoading: false,
   activeTab: 'code',
+  graphHighlightNode: null,
 
   favorites: [],
   recentFiles: [],
@@ -314,5 +320,11 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
 
   setCompareModalOpen: (isOpen: boolean) => {
     set({ isCompareModalOpen: isOpen });
-  }
+  },
+
+  navigateToGraphNode: (nodeId: string) => {
+    set({ activeTab: 'dependencies', graphHighlightNode: nodeId });
+    // Clear after a short delay so the graph can read and animate it
+    setTimeout(() => set({ graphHighlightNode: null }), 2000);
+  },
 }));
