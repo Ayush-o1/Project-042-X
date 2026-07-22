@@ -13,7 +13,7 @@ import { SessionHistory } from './SessionHistory';
 import { CompareSnapshots } from '../insights/CompareSnapshots';
 import { saveSession } from '../../lib/sessionEngine';
 import { exportReportPdf } from '../../lib/exportEngine';
-import { computeInsights } from '../../lib/insightsEngine';
+import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '../ui/Toast';
 
 /* ── Lazy views ─────────────────────────────────────────────── */
@@ -183,12 +183,20 @@ const EmptyHero: React.FC = () => {
 
 /* ── AppShell ───────────────────────────────────────────────── */
 export const AppShell: React.FC = () => {
-  const store = useRepositoryStore();
   const {
     isAnalyzing, error, metadata, activeTab, setActiveTab,
-    setCommandPaletteOpen,
-    files, dependencies, git, graphHighlightNode,
-  } = store;
+    setCommandPaletteOpen, graphHighlightNode,
+  } = useRepositoryStore(
+    useShallow(s => ({
+      isAnalyzing: s.isAnalyzing,
+      error: s.error,
+      metadata: s.metadata,
+      activeTab: s.activeTab,
+      setActiveTab: s.setActiveTab,
+      setCommandPaletteOpen: s.setCommandPaletteOpen,
+      graphHighlightNode: s.graphHighlightNode,
+    })),
+  );
 
   const toast = useToast();
 
@@ -205,8 +213,8 @@ export const AppShell: React.FC = () => {
       // Cmd+S — Save session
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
+        const { metadata, files, dependencies, git, insights } = useRepositoryStore.getState();
         if (metadata) {
-          const insights = computeInsights(files, dependencies, git);
           saveSession(metadata.name, metadata, files, dependencies, git, insights)
             .then(() => toast.success('Session saved', `"${metadata.name}" snapshot stored locally.`))
             .catch(() => toast.error('Save failed', 'Could not write to IndexedDB.'));
@@ -215,8 +223,8 @@ export const AppShell: React.FC = () => {
       // Cmd+Shift+E — Export PDF
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
         e.preventDefault();
-        if (metadata) {
-          const insights = computeInsights(files, dependencies, git);
+        const { metadata, insights } = useRepositoryStore.getState();
+        if (metadata && insights) {
           exportReportPdf(metadata, insights);
           toast.success('PDF exported', 'Architecture report downloaded.');
         }
@@ -224,7 +232,7 @@ export const AppShell: React.FC = () => {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [setCommandPaletteOpen, metadata, files, dependencies, git, toast]);
+  }, [setCommandPaletteOpen, toast]);
 
   return (
     <div

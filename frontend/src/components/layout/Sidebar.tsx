@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
+import { useShallow } from 'zustand/react/shallow';
 import {
   ChevronRight, ChevronDown, File, FileCode2, FileJson,
   Image as ImageIcon, Star, X, Layers,
@@ -34,16 +35,17 @@ const getFileIcon = (ext?: string): React.ReactNode => {
 };
 
 /* ── FileTree row ───────────────────────────────────────────── */
+// Every row selects only the exact slivers of state it needs (not the whole
+// store) so that e.g. toggling one folder re-renders one row, not the tree.
 const FileTreeNode: React.FC<{ node: TreeNode }> = React.memo(({ node }) => {
-  const {
-    setActiveFile, activeFile,
-    expandedFolders, toggleFolder,
-    toggleFavorite, favorites
-  } = useRepositoryStore();
-
-  const isOpen     = expandedFolders[node.path] || false;
-  const isSelected = activeFile?.path === node.file?.path;
-  const isFav      = node.file ? favorites.some(f => f.path === node.file?.path) : false;
+  const setActiveFile = useRepositoryStore(s => s.setActiveFile);
+  const toggleFolder = useRepositoryStore(s => s.toggleFolder);
+  const toggleFavorite = useRepositoryStore(s => s.toggleFavorite);
+  const isOpen = useRepositoryStore(s => s.expandedFolders[node.path] || false);
+  const isSelected = useRepositoryStore(s => s.activeFile?.path === node.file?.path);
+  const isFav = useRepositoryStore(s =>
+    node.file ? s.favorites.some(f => f.path === node.file?.path) : false,
+  );
 
   const handleClick = () => {
     if (node.isDirectory) {
@@ -159,7 +161,18 @@ export const Sidebar: React.FC = () => {
     files, metadata, favorites, openFiles,
     setActiveFile, activeFile, closeFile,
     expandedFolders,
-  } = useRepositoryStore();
+  } = useRepositoryStore(
+    useShallow(s => ({
+      files: s.files,
+      metadata: s.metadata,
+      favorites: s.favorites,
+      openFiles: s.openFiles,
+      setActiveFile: s.setActiveFile,
+      activeFile: s.activeFile,
+      closeFile: s.closeFile,
+      expandedFolders: s.expandedFolders,
+    })),
+  );
 
   /* Build the flat visible tree (memoized) */
   const flatVisibleFiles = useMemo(() => {

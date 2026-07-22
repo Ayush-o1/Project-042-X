@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
+import { useShallow } from 'zustand/react/shallow';
 import { listSessions, loadSession } from '../../lib/sessionEngine';
 import type { AnalysisSession } from '../../lib/sessionEngine';
 import { X, ArrowRight, GitCompare, TrendingUp, TrendingDown, Minus } from 'lucide-react';
@@ -37,7 +38,9 @@ const DiffCell: React.FC<{ a: number; b: number; isFloat?: boolean; lowerIsBette
 };
 
 export const CompareSnapshots: React.FC = () => {
-  const { isCompareModalOpen, setCompareModalOpen } = useRepositoryStore();
+  const { isCompareModalOpen, setCompareModalOpen } = useRepositoryStore(
+    useShallow(s => ({ isCompareModalOpen: s.isCompareModalOpen, setCompareModalOpen: s.setCompareModalOpen })),
+  );
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionA, setSessionA] = useState<AnalysisSession | null>(null);
   const [sessionB, setSessionB] = useState<AnalysisSession | null>(null);

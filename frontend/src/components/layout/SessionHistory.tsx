@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
+import { useShallow } from 'zustand/react/shallow';
 import {
   listSessions, loadSession, deleteSession,
   exportSessionToFile, importSessionFromFile
@@ -14,7 +15,13 @@ import { useToast } from '../ui/Toast';
 type SessionSummary = Omit<AnalysisSession, 'files' | 'dependencies' | 'git' | 'insights'>;
 
 export const SessionHistory: React.FC = () => {
-  const { isSessionHistoryOpen, setSessionHistoryOpen, loadSessionIntoStore } = useRepositoryStore();
+  const { isSessionHistoryOpen, setSessionHistoryOpen, loadSessionIntoStore } = useRepositoryStore(
+    useShallow(s => ({
+      isSessionHistoryOpen: s.isSessionHistoryOpen,
+      setSessionHistoryOpen: s.setSessionHistoryOpen,
+      loadSessionIntoStore: s.loadSessionIntoStore,
+    })),
+  );
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);

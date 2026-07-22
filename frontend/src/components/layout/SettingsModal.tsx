@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
+import { useShallow } from 'zustand/react/shallow';
 import { X, Keyboard } from 'lucide-react';
 
 const SHORTCUTS = [
@@ -9,7 +10,9 @@ const SHORTCUTS = [
 ];
 
 export const SettingsModal: React.FC = () => {
-  const { isSettingsOpen, setSettingsOpen } = useRepositoryStore();
+  const { isSettingsOpen, setSettingsOpen } = useRepositoryStore(
+    useShallow(s => ({ isSettingsOpen: s.isSettingsOpen, setSettingsOpen: s.setSettingsOpen })),
+  );
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {

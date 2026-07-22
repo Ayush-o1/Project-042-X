@@ -10,7 +10,7 @@ import {
   exportGraphToPng, exportGraphToSvg,
   exportReportMarkdown, exportReportJson, exportReportPdf
 } from '../../lib/exportEngine';
-import { computeInsights } from '../../lib/insightsEngine';
+import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '../ui/Toast';
 
 /* ── Export menu items ──────────────────────────────────────── */
@@ -35,8 +35,20 @@ export const Header: React.FC = () => {
     analyze, isAnalyzing, metadata,
     cancelAnalysis, analysisProgress,
     setSettingsOpen, setSessionHistoryOpen, setCompareModalOpen,
-    files, dependencies, git, activeTab
-  } = useRepositoryStore();
+    activeTab,
+  } = useRepositoryStore(
+    useShallow(s => ({
+      analyze: s.analyze,
+      isAnalyzing: s.isAnalyzing,
+      metadata: s.metadata,
+      cancelAnalysis: s.cancelAnalysis,
+      analysisProgress: s.analysisProgress,
+      setSettingsOpen: s.setSettingsOpen,
+      setSessionHistoryOpen: s.setSessionHistoryOpen,
+      setCompareModalOpen: s.setCompareModalOpen,
+      activeTab: s.activeTab,
+    })),
+  );
 
   const toast = useToast();
   const [pathInput, setPathInput] = useState('');
@@ -66,8 +78,8 @@ export const Header: React.FC = () => {
   };
 
   const handleSaveSession = async () => {
+    const { metadata, files, dependencies, git, insights } = useRepositoryStore.getState();
     if (!metadata) return;
-    const insights = computeInsights(files, dependencies, git);
     try {
       await saveSession(metadata.name, metadata, files, dependencies, git, insights);
       toast.success('Session saved', `Snapshot of "${metadata.name}" stored locally.`);
@@ -78,7 +90,8 @@ export const Header: React.FC = () => {
 
   const handleExport = async (format: string) => {
     setExportOpen(false);
-    if (!metadata) return;
+    const { metadata, files, insights } = useRepositoryStore.getState();
+    if (!metadata || !insights) return;
 
     // Graph image exports capture the live DOM of the Architecture view —
     // it must be the active (mounted) tab, otherwise there is nothing to render.
@@ -88,7 +101,6 @@ export const Header: React.FC = () => {
     }
 
     setIsExporting(true);
-    const insights = computeInsights(files, dependencies, git);
     try {
       if (format === 'png') {
         await exportGraphToPng('architecture-graph-container');

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
+import { useShallow } from 'zustand/react/shallow';
 import {
   Search, FileCode2, FileJson, Image as ImageIcon,
   File, FileText, Command
@@ -30,7 +31,14 @@ const highlightMatch = (text: string, query: string) => {
 };
 
 export const CommandPalette: React.FC = () => {
-  const { commandPaletteOpen, setCommandPaletteOpen, files, setActiveFile } = useRepositoryStore();
+  const { commandPaletteOpen, setCommandPaletteOpen, files, setActiveFile } = useRepositoryStore(
+    useShallow(s => ({
+      commandPaletteOpen: s.commandPaletteOpen,
+      setCommandPaletteOpen: s.setCommandPaletteOpen,
+      files: s.files,
+      setActiveFile: s.setActiveFile,
+    })),
+  );
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);

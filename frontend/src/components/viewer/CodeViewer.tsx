@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
+import { useShallow } from 'zustand/react/shallow';
 import hljs from 'highlight.js';
 import {
   FileCode, Copy, Check, ChevronRight,
@@ -145,7 +146,16 @@ export const CodeViewer: React.FC = () => {
   const {
     activeFile, activeFileContent, isFileLoading,
     openFiles, setActiveFile, closeFile,
-  } = useRepositoryStore();
+  } = useRepositoryStore(
+    useShallow(s => ({
+      activeFile: s.activeFile,
+      activeFileContent: s.activeFileContent,
+      isFileLoading: s.isFileLoading,
+      openFiles: s.openFiles,
+      setActiveFile: s.setActiveFile,
+      closeFile: s.closeFile,
+    })),
+  );
 
   // Removed unused hover state — close button visibility handled purely via CSS
 

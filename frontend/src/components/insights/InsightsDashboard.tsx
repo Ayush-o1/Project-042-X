@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
-import { computeInsights } from '../../lib/insightsEngine';
+import { useShallow } from 'zustand/react/shallow';
 import { AUTHOR_PALETTE } from '../../lib/authorColors';
 import type { ModuleMetrics, PackageMetrics } from '../../lib/insightsEngine';
 import {
@@ -344,15 +344,20 @@ const LANG_COLORS: Record<string, string> = {
 /* ── Main Dashboard ───────────────────────────────────────────────── */
 export const InsightsDashboard: React.FC = () => {
   const {
-    files, dependencies, git,
+    files, insights,
     isFetchingFiles, isFetchingDependencies, isFetchingGit,
     navigateToGraphNode, setActiveFile,
-  } = useRepositoryStore();
-
-  const insights = useMemo(() => {
-    if (files.length === 0 && !dependencies && !git) return null;
-    return computeInsights(files, dependencies, git);
-  }, [files, dependencies, git]);
+  } = useRepositoryStore(
+    useShallow(s => ({
+      files: s.files,
+      insights: s.insights,
+      isFetchingFiles: s.isFetchingFiles,
+      isFetchingDependencies: s.isFetchingDependencies,
+      isFetchingGit: s.isFetchingGit,
+      navigateToGraphNode: s.navigateToGraphNode,
+      setActiveFile: s.setActiveFile,
+    })),
+  );
 
   if (!insights) {
     return (

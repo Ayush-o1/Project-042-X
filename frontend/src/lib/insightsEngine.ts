@@ -169,9 +169,8 @@ export function computeInsights(
       authorCommitMap.set(author, (authorCommitMap.get(author) || 0) + 1);
 
       // Activity over time
-      const ts = (commit as any).timestamp ?? (commit as any).date;
-      if (ts && typeof ts === 'string' && ts.includes('T')) {
-        const dateStr = ts.split('T')[0];
+      if (commit.timestamp && commit.timestamp.includes('T')) {
+        const dateStr = commit.timestamp.split('T')[0];
         commitActivityMap.set(dateStr, (commitActivityMap.get(dateStr) || 0) + 1);
       }
 
