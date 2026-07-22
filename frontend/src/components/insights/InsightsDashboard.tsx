@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { computeInsights } from '../../lib/insightsEngine';
+import { AUTHOR_PALETTE } from '../../lib/authorColors';
 import type { ModuleMetrics, PackageMetrics } from '../../lib/insightsEngine';
 import {
   AlertTriangle, FileCode, Network, Layers,
@@ -311,11 +312,6 @@ const PackageRow: React.FC<{ p: PackageMetrics }> = ({ p }) => {
 };
 
 /* ── Author bar ───────────────────────────────────────────────────── */
-const AUTHOR_PALETTE = [
-  '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-  '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6'
-];
-
 const AuthorBar: React.FC<{ author: string; count: number; pct: number; color: string }> = ({ author, count, pct, color }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
     <div style={{ width: 24, height: 24, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -426,13 +422,13 @@ export const InsightsDashboard: React.FC = () => {
           status={insights.orphanFiles.length === 0 ? 'good' : insights.orphanFiles.length < 5 ? 'warn' : 'danger'}
         />
         <KpiCard
-          label="Architecture Complexity"
-          value={`${insights.architectureComplexityScore}%`}
+          label="Avg Dependencies"
+          value={insights.avgOutDegree.toFixed(2)}
           icon={<Zap size={16} />}
           iconBg="var(--accent-subtle)"
           iconColor="var(--accent-hover)"
-          description="Edge density: actual edges / max possible edges (coupling ratio)"
-          status={insights.architectureComplexityScore > 15 ? 'danger' : insights.architectureComplexityScore > 8 ? 'warn' : 'good'}
+          description={`Average imports per source file · graph density ${insights.graphDensity}%`}
+          status={insights.avgOutDegree > 4 ? 'danger' : insights.avgOutDegree > 2.5 ? 'warn' : 'good'}
         />
         <KpiCard
           label="Max Depth Chain"
@@ -458,20 +454,20 @@ export const InsightsDashboard: React.FC = () => {
         />
         <KpiCard
           label="Unstable Modules"
-          value={insights.mostUnstableModules.filter(m => m.instability > 0.7).length}
+          value={insights.unstableModuleCount}
           icon={<ShieldAlert size={16} />}
           iconBg="var(--color-danger-subtle)"
           iconColor="var(--color-danger)"
-          description="Modules with instability > 0.7 (Martin's metric)"
-          status={insights.mostUnstableModules.filter(m => m.instability > 0.7).length > 5 ? 'danger' : 'warn'}
+          description="Source modules with instability > 0.7 (Martin's metric)"
+          status={insights.unstableModuleCount > 5 ? 'danger' : insights.unstableModuleCount > 0 ? 'warn' : 'good'}
         />
         <KpiCard
-          label="Hotspot Files"
-          value={insights.hotspots.length}
+          label="Max Fan-In"
+          value={insights.hotspots[0]?.inDegree ?? 0}
           icon={<Flame size={16} />}
           iconBg="rgba(245,158,11,0.1)"
           iconColor="#f59e0b"
-          description="Top fan-in files — most imported across the codebase"
+          description="Highest number of importers on a single module"
           status="neutral"
         />
         <KpiCard

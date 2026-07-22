@@ -1,5 +1,34 @@
 import type { DependencyGraphData, FileModel, GitGraphData } from '../types';
 
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Extensions the AST engine can parse — the only files that can have edges. */
+const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx|cjs|mjs)$/;
+export const isSourceFile = (path: string): boolean => SOURCE_FILE_RE.test(path);
+
+/**
+ * Derives the repository root from the file list.
+ * Prefers the backend-provided relativePath (exact); falls back to the longest
+ * common directory prefix for data loaded from older saved sessions.
+ */
+export function deriveRepoRoot(files: FileModel[]): string {
+  for (const f of files) {
+    if (f.relativePath && f.path.endsWith(f.relativePath)) {
+      return f.path.slice(0, f.path.length - f.relativePath.length - 1);
+    }
+  }
+  // Fallback: longest common directory prefix of all absolute paths
+  if (files.length === 0) return '';
+  let prefix = files[0].path.slice(0, files[0].path.lastIndexOf('/'));
+  for (const f of files) {
+    while (prefix && f.path !== prefix && !f.path.startsWith(prefix + '/')) {
+      prefix = prefix.slice(0, prefix.lastIndexOf('/'));
+    }
+    if (!prefix) break;
+  }
+  return prefix;
+}
+
 // ─── Result Types ──────────────────────────────────────────────────────────────
 
 export interface ModuleMetrics {
@@ -37,8 +66,13 @@ export interface PackageMetrics {
   totalFanOut: number;
   internalEdges: number;
   externalEdges: number;
-  /** Abstractness: how self-contained the package is */
-  abstractness: number;
+  /**
+   * Cohesion: ratio of intra-package edges to all edges touching the package
+   * (1 = fully self-contained, 0 = all dependencies cross the boundary).
+   * Note: this is NOT Robert Martin's "Abstractness" (abstract/total classes),
+   * which would require type-level analysis.
+   */
+  cohesion: number;
 }
 
 export interface InsightsResult {
@@ -63,11 +97,15 @@ export interface InsightsResult {
   /** Per-directory package health rollups */
   packageMetrics: PackageMetrics[];
   /**
-   * Architecture Complexity Score (ACS): ratio of edges to nodes.
-   * A fully connected graph has ACS = N-1. We normalize to 0-100.
-   * Higher = more coupled architecture.
+   * Directed edge density of the source-file graph, as a percentage:
+   * E / (N·(N−1)) × 100 where N counts only parseable source files.
+   * Real dependency graphs are sparse, so values are typically well below 1%.
    */
-  architectureComplexityScore: number;
+  graphDensity: number;
+  /** Average outgoing dependencies per source file (E / N). */
+  avgOutDegree: number;
+  /** Number of source modules with instability > 0.7 (excluding orphans). */
+  unstableModuleCount: number;
   /** Author → commit count map */
   authorContributions: { author: string; count: number; percentage: number }[];
   /** Set of node IDs that participate in circular dependencies (for graph overlay) */
@@ -85,6 +123,7 @@ export function computeInsights(
 ): InsightsResult {
 
   // ── 1. File Type Distribution & Largest Modules ───────────────────────────
+  const repoRoot = deriveRepoRoot(files);
   const fileTypeDistributionMap = new Map<string, number>();
   const folderSizeMap = new Map<string, number>();
 
@@ -93,7 +132,14 @@ export function computeInsights(
       const ext = file.extension || 'Unknown';
       fileTypeDistributionMap.set(ext, (fileTypeDistributionMap.get(ext) || 0) + 1);
 
-      const parts = file.path.split('/');
+      // Accumulate sizes on repo-relative folders only. Splitting the absolute
+      // path would credit the entire repo size to every ancestor directory
+      // (/Users, /Users/name, …), which is meaningless.
+      const rel = file.relativePath
+        ?? (repoRoot && file.path.startsWith(repoRoot + '/')
+          ? file.path.slice(repoRoot.length + 1)
+          : file.path);
+      const parts = rel.split('/');
       let currentFolder = '';
       for (let i = 0; i < parts.length - 1; i++) {
         currentFolder += (i === 0 ? '' : '/') + parts[i];
@@ -175,21 +221,28 @@ export function computeInsights(
       reverseAdjList.get(edge.targetId)?.push(edge.sourceId);
     }
 
-    // Hotspots & connectivity
+    // Hotspots & connectivity.
+    // Only parseable source files can ever have edges, so orphan detection and
+    // per-node averages are restricted to them — otherwise every .md/.json/.py
+    // file would be falsely flagged as a "dead code candidate".
     let totalInDegree = 0;
+    let sourceNodeCount = 0;
     for (const node of nodes) {
       const inD = inDegreeMap.get(node.id) || 0;
       const outD = outDegreeMap.get(node.id) || 0;
       totalInDegree += inD;
 
-      if (inD === 0 && outD === 0) orphanFiles.push(node.id);
+      if (isSourceFile(node.id)) {
+        sourceNodeCount++;
+        if (inD === 0 && outD === 0) orphanFiles.push(node.id);
+      }
       hotspots.push({ id: node.id, inDegree: inD });
       mostConnectedFiles.push({ id: node.id, totalDegree: inD + outD });
     }
 
     hotspots = hotspots.sort((a, b) => b.inDegree - a.inDegree).slice(0, 10);
     mostConnectedFiles = mostConnectedFiles.sort((a, b) => b.totalDegree - a.totalDegree).slice(0, 10);
-    averageFanIn = nodes.length > 0 ? totalInDegree / nodes.length : 0;
+    averageFanIn = sourceNodeCount > 0 ? totalInDegree / sourceNodeCount : 0;
 
     // ── Tarjan's SCC for Circular Dependencies ──────────────────────────────
     let sccIndex = 0;
@@ -259,13 +312,14 @@ export function computeInsights(
       }
     }
 
-    // ── Architecture Complexity Score ───────────────────────────────────────
-    // Normalize edge density: 0 (no edges) to 100 (fully coupled)
-    // Max possible edges in directed graph = N*(N-1)
-    const N = nodes.length;
+    // ── Graph Density (source-file graph only) ─────────────────────────────
+    // Directed edge density E / (N·(N−1)). Non-source nodes never carry edges,
+    // so including them would only dilute the denominator.
+    const N = sourceNodeCount;
     const E = edges.length;
     const maxEdges = N > 1 ? N * (N - 1) : 1;
-    const architectureComplexityScore = Math.round((E / maxEdges) * 100);
+    const graphDensity = Math.round((E / maxEdges) * 10000) / 100;
+    const avgOutDegree = N > 0 ? Math.round((E / N) * 100) / 100 : 0;
 
     // ── Per-Module Metrics (Instability, Health Score) ─────────────────────
     const maxCommitCount = Math.max(...Array.from(relativeFileCommitMap.values()), 1);
@@ -279,20 +333,26 @@ export function computeInsights(
       // Robert Martin's Instability: Ce / (Ca + Ce)
       // Ce = efferent coupling = fanOut (modules this depends on)
       // Ca = afferent coupling = fanIn (modules depending on this)
+      // Defined as 0 for uncoupled modules (I is mathematically undefined there).
       const instability = totalCoupling === 0 ? 0 : fanOut / totalCoupling;
 
-      // Commit count: try to match by relative path suffix
-      const fileName = node.id.split('/').pop() || '';
+      // Commit count: git paths are repo-relative, node ids are absolute.
+      // Join deterministically via the repo root instead of guessing by suffix
+      // (suffix matching made every `index.ts` share one commit count).
       let commitCount = 0;
-      for (const [relPath, count] of relativeFileCommitMap.entries()) {
-        if (node.id.endsWith(relPath) || relPath.endsWith(fileName)) {
-          commitCount = count;
-          break;
+      if (repoRoot && node.id.startsWith(repoRoot + '/')) {
+        commitCount = relativeFileCommitMap.get(node.id.slice(repoRoot.length + 1)) || 0;
+      } else {
+        for (const [relPath, count] of relativeFileCommitMap.entries()) {
+          if (node.id.endsWith('/' + relPath)) {
+            commitCount = count;
+            break;
+          }
         }
       }
 
       const isInCycle = cycleNodeIds.has(node.id);
-      const isOrphan = fanIn === 0 && fanOut === 0;
+      const isOrphan = isSourceFile(node.id) && fanIn === 0 && fanOut === 0;
 
       // Health Score (0–100, higher = healthier)
       // Penalize: high instability (weight 40), high hotspot (weight 30), high churn (weight 20), in cycle (weight 10)
@@ -360,9 +420,9 @@ export function computeInsights(
         const f = files.find(f => f.path === id);
         return s + (f?.size || 0);
       }, 0);
-      // Abstractness: proportion of internal to total edges — higher = more self-contained
+      // Cohesion: proportion of internal to total edges — higher = more self-contained
       const totalEdges = p.internalEdges + p.externalEdges;
-      const abstractness = totalEdges === 0 ? 1 : p.internalEdges / totalEdges;
+      const cohesion = totalEdges === 0 ? 1 : p.internalEdges / totalEdges;
 
       return {
         path,
@@ -374,20 +434,21 @@ export function computeInsights(
         totalFanOut: p.totalFanOut,
         internalEdges: p.internalEdges,
         externalEdges: p.externalEdges,
-        abstractness,
+        cohesion,
       };
     }).sort((a, b) => a.avgHealthScore - b.avgHealthScore);
 
-    // Finalize sorted module lists
-    const allModules = Array.from(moduleMetrics.values());
-    const mostUnstableModules = [...allModules]
-      .filter(m => !m.isOrphan)
+    // Finalize sorted module lists (source files only — coupling metrics are
+    // meaningless for files the parser never touches)
+    const sourceModules = Array.from(moduleMetrics.values())
+      .filter(m => isSourceFile(m.id) && !m.isOrphan);
+    const mostUnstableModules = [...sourceModules]
       .sort((a, b) => b.instability - a.instability)
       .slice(0, 10);
-    const sickestModules = [...allModules]
-      .filter(m => !m.isOrphan)
+    const sickestModules = [...sourceModules]
       .sort((a, b) => a.healthScore - b.healthScore)
       .slice(0, 10);
+    const unstableModuleCount = sourceModules.filter(m => m.instability > 0.7).length;
 
     // Hotspot node IDs (top 10 by fan-in)
     const hotspotNodeIds = new Set(hotspots.map(h => h.id));
@@ -426,7 +487,9 @@ export function computeInsights(
       mostUnstableModules,
       sickestModules,
       packageMetrics,
-      architectureComplexityScore,
+      graphDensity,
+      avgOutDegree,
+      unstableModuleCount,
       authorContributions,
       cycleNodeIds,
       hotspotNodeIds,
@@ -467,9 +530,27 @@ export function computeInsights(
     mostUnstableModules: [],
     sickestModules: [],
     packageMetrics: [],
-    architectureComplexityScore: 0,
+    graphDensity: 0,
+    avgOutDegree: 0,
+    unstableModuleCount: 0,
     authorContributions,
     cycleNodeIds: new Set(),
     hotspotNodeIds: new Set(),
+  };
+}
+
+// ─── Serialization ─────────────────────────────────────────────────────────────
+
+/**
+ * Converts an InsightsResult into a plain-JSON-safe object.
+ * InsightsResult contains Map and Set values, which JSON.stringify silently
+ * serializes as `{}` — exports must go through this instead.
+ */
+export function serializeInsights(insights: InsightsResult) {
+  return {
+    ...insights,
+    moduleMetrics: Array.from(insights.moduleMetrics.values()),
+    cycleNodeIds: Array.from(insights.cycleNodeIds),
+    hotspotNodeIds: Array.from(insights.hotspotNodeIds),
   };
 }

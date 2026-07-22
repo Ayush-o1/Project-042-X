@@ -44,7 +44,7 @@ export class SwcParser implements IParser {
       deps.imports.push({
         specifier: node.moduleReference.expression.value,
         isDynamic: false,
-        isTypeOnly: node.isExport === false && node.isTypeOnly === true,
+        isTypeOnly: node.isTypeOnly === true,
       });
     }
 

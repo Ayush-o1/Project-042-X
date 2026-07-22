@@ -16,7 +16,7 @@ import { getDagreLayout } from './layoutUtils';
 import { FileNode } from './FileNode';
 import { FolderNode } from './FolderNode';
 import { CustomEdge } from './CustomEdge';
-import { computeInsights } from '../../lib/insightsEngine';
+import { computeInsights, deriveRepoRoot } from '../../lib/insightsEngine';
 import type { ModuleMetrics } from '../../lib/insightsEngine';
 import {
   Search, ZoomIn, ZoomOut, Maximize, X, ExternalLink, FileCode,
@@ -315,10 +315,10 @@ const Inspector = ({
   const deps = dependencies?.edges.filter(e => e.sourceId === path || e.source === path).map(e => e.targetId || e.target) || [];
   const dependents = dependencies?.edges.filter(e => e.targetId === path || e.target === path).map(e => e.sourceId || e.source) || [];
 
-  // Git data
-  const commitCount = gitCommitMap.get(fileName) || gitCommitMap.get(path) || metrics?.commitCount || 0;
-  const authors = gitAuthorsMap.get(path) || gitAuthorsMap.get(fileName) || [];
-  const lastModified = gitLastModifiedMap.get(path) || gitLastModifiedMap.get(fileName) || null;
+  // Git data (all maps are keyed by absolute path)
+  const commitCount = gitCommitMap.get(path) ?? metrics?.commitCount ?? 0;
+  const authors = gitAuthorsMap.get(path) || [];
+  const lastModified = gitLastModifiedMap.get(path) || null;
 
   const FileList: React.FC<{ paths: string[]; label: string; icon: React.ReactNode; color: string }> = ({ paths, label, icon, color }) => (
     paths.length > 0 ? (
@@ -541,10 +541,9 @@ const Inspector = ({
 // ─── Flow Wrapper ──────────────────────────────────────────────────────────────
 
 const FlowWrapper: React.FC<{
-  onNodeNavigate?: (nodeId: string) => void;
   externalHighlight?: string | null;
 }> = ({ externalHighlight }) => {
-  const { dependencies, files, git, setActiveFile } = useRepositoryStore();
+  const { dependencies, files, git, setActiveFile, clearGraphHighlight } = useRepositoryStore();
   const { setCenter } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -567,42 +566,43 @@ const FlowWrapper: React.FC<{
   }, [files, dependencies, git]);
 
   // ── Build git data lookup maps from raw git data ───────────────────────────
+  // Git paths are repo-relative while node ids are absolute, so all maps are
+  // keyed by absolute path (joined via the repo root). Keying by basename
+  // caused every `index.ts` in the repo to share one entry.
   const { gitCommitMap, gitAuthorsMap, gitLastModifiedMap } = useMemo(() => {
     const commitMap = new Map<string, number>();
     const authorsMap = new Map<string, string[]>();
     const lastModMap = new Map<string, string>();
+    const repoRoot = deriveRepoRoot(files);
 
-    if (git) {
+    if (git && repoRoot) {
       for (const commit of git.commits) {
         const ts = (commit as any).timestamp ?? (commit as any).date;
         const dateStr = ts && typeof ts === 'string' ? ts.split('T')[0] : null;
 
         for (const file of commit.filesChanged || []) {
           if (!file) continue;
-          const baseName = file.split('/').pop() || file;
+          const absPath = `${repoRoot}/${file}`;
 
           // Commit count
-          commitMap.set(file, (commitMap.get(file) || 0) + 1);
-          commitMap.set(baseName, (commitMap.get(baseName) || 0) + 1);
+          commitMap.set(absPath, (commitMap.get(absPath) || 0) + 1);
 
           // Authors
-          const authors = authorsMap.get(file) || [];
+          const authors = authorsMap.get(absPath) || [];
           if (commit.author && !authors.includes(commit.author)) {
             authors.push(commit.author);
-            authorsMap.set(file, authors);
-            authorsMap.set(baseName, authors);
+            authorsMap.set(absPath, authors);
           }
 
           // Last modified (commits are sorted newest first)
-          if (dateStr && !lastModMap.has(file)) {
-            lastModMap.set(file, dateStr);
-            lastModMap.set(baseName, dateStr);
+          if (dateStr && !lastModMap.has(absPath)) {
+            lastModMap.set(absPath, dateStr);
           }
         }
       }
     }
     return { gitCommitMap: commitMap, gitAuthorsMap: authorsMap, gitLastModifiedMap: lastModMap };
-  }, [git]);
+  }, [git, files]);
 
   // ── Collect unique file types for filter dropdown ─────────────────────────
   const fileTypes = useMemo(() => {
@@ -728,10 +728,16 @@ const FlowWrapper: React.FC<{
   }, [hoveredNode, dependencies, setNodes, setEdges]);
 
   // ── External highlight (from Insights navigation) ────────────────────────
+  // Re-runs when nodes populate so navigation works even while this lazy view
+  // is still mounting; the highlight is cleared only once actually consumed.
   useEffect(() => {
-    if (!externalHighlight) return;
-    handleSearchFocus(externalHighlight);
-  }, [externalHighlight]); // eslint-disable-line
+    if (!externalHighlight || nodes.length === 0) return;
+    const found = nodes.some(n => n.id === externalHighlight);
+    if (found) {
+      handleSearchFocus(externalHighlight);
+      clearGraphHighlight();
+    }
+  }, [externalHighlight, nodes]); // eslint-disable-line
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type === 'folderNode') return;

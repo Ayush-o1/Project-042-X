@@ -1,6 +1,8 @@
 export interface FileModel {
   name: string;
   path: string;
+  /** Path relative to the repository root (provided by the backend scanner). */
+  relativePath?: string;
   isDirectory: boolean;
   size: number;
   extension: string;

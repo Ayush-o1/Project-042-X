@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { InvalidRepositoryError, FileSystemAccessError } from '../errors/RepositoryErrors';
+import { InvalidRepositoryError } from '../errors/RepositoryErrors';
 import { RepositoryModel, FileModel } from './types';
 import { IgnoreFilter } from './IgnoreFilter';
 import { isSupportedExtension, getLanguageForExtension } from './ExtensionRegistry';

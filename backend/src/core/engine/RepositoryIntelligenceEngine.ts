@@ -24,15 +24,12 @@ export class RepositoryIntelligenceEngine {
    * @returns The fully unified repository model.
    */
   public async analyze(repoPath: string): Promise<UnifiedRepositoryModel> {
-    // We launch Git and FS Scans concurrently to minimize latency.
-    
-    // Thread A: Filesystem + AST
+    // The filesystem/AST pipeline and the git log run as concurrent async
+    // operations (interleaved I/O on the event loop — not separate threads)
+    // so neither waits on the other's disk access.
     const fileSystemAndAstPromise = this.processFileSystemAndAst(repoPath);
-    
-    // Thread B: Git History
     const gitPromise = this.gitEngine.analyze(repoPath);
 
-    // Await all threads
     const [{ repoModel, dependencyGraph }, gitGraph] = await Promise.all([
       fileSystemAndAstPromise,
       gitPromise

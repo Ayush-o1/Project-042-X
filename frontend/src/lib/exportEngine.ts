@@ -1,5 +1,6 @@
 import { toPng, toSvg } from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { serializeInsights } from './insightsEngine';
 import type { InsightsResult } from './insightsEngine';
 import type { RepositoryMetadata, FileModel } from '../types';
 
@@ -103,7 +104,9 @@ export function exportReportJson(
   const payload = {
     timestamp: new Date().toISOString(),
     metadata,
-    insights,
+    // InsightsResult contains Maps/Sets which JSON.stringify drops silently —
+    // serialize to plain arrays so the report actually contains the data.
+    insights: serializeInsights(insights),
     fileCount: files.length
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
