@@ -35,7 +35,7 @@ export const Header: React.FC = () => {
     analyze, isAnalyzing, metadata,
     cancelAnalysis, analysisProgress,
     setSettingsOpen, setSessionHistoryOpen, setCompareModalOpen,
-    files, dependencies, git
+    files, dependencies, git, activeTab
   } = useRepositoryStore();
 
   const toast = useToast();
@@ -79,6 +79,14 @@ export const Header: React.FC = () => {
   const handleExport = async (format: string) => {
     setExportOpen(false);
     if (!metadata) return;
+
+    // Graph image exports capture the live DOM of the Architecture view —
+    // it must be the active (mounted) tab, otherwise there is nothing to render.
+    if ((format === 'png' || format === 'svg') && activeTab !== 'dependencies') {
+      toast.warning('Open the Architecture tab', 'Graph image exports capture the visible dependency graph. Switch to the Architecture tab first.');
+      return;
+    }
+
     setIsExporting(true);
     const insights = computeInsights(files, dependencies, git);
     try {

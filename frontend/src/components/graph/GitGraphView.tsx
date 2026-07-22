@@ -15,18 +15,7 @@ import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { getGitDagreLayout } from './layoutUtils';
 import { CommitNode } from './CommitNode';
 import { Search, ZoomIn, ZoomOut, Maximize, GitBranch, Filter, X, Users, ChevronDown } from 'lucide-react';
-
-// Deterministic author color
-const AUTHOR_PALETTE = [
-  '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-  '#06b6d4', '#f97316', '#84cc16', '#ec4899', '#14b8a6'
-];
-
-function hashAuthor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
-  return AUTHOR_PALETTE[Math.abs(h) % AUTHOR_PALETTE.length];
-}
+import { hashAuthor } from '../../lib/authorColors';
 
 // Extended CommitNode wrapper so we can pass onOpenFile
 const CommitNodeWrapper = (props: any) => {

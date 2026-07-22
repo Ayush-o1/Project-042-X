@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { API_URL } from '../lib/config';
 import type { FileModel, RepositoryMetadata, DependencyGraphData, GitGraphData } from '../types';
 
 interface RepositoryState {
@@ -27,7 +28,6 @@ interface RepositoryState {
 
   // DX State
   favorites: FileModel[];
-  recentFiles: FileModel[];
   expandedFolders: Record<string, boolean>;
   commandPaletteOpen: boolean;
   isSettingsOpen: boolean;
@@ -49,6 +49,8 @@ interface RepositoryState {
   loadSessionIntoStore: (session: any) => void;
   /** Navigate to the dependency graph and highlight a specific node */
   navigateToGraphNode: (nodeId: string) => void;
+  /** Called by the graph view once it has focused the highlighted node */
+  clearGraphHighlight: () => void;
 }
 
 export const useRepositoryStore = create<RepositoryState>((set, get) => ({
@@ -73,7 +75,6 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   graphHighlightNode: null,
 
   favorites: [],
-  recentFiles: [],
   expandedFolders: {},
   commandPaletteOpen: false,
   isSettingsOpen: false,
@@ -130,7 +131,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
 
     try {
       // 1. Fetch Metadata (Core analysis)
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/repository/analyze`, {
+      const res = await fetch(`${API_URL}/repository/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path }),
@@ -145,7 +146,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       set({ metadata: data.data, analysisProgress: 30, isFetchingFiles: true });
 
       // 2. Fetch Files Incremental
-      const filesRes = await fetch(`${import.meta.env.VITE_API_URL}/repository/files`, { signal });
+      const filesRes = await fetch(`${API_URL}/repository/files`, { signal });
       const filesData = await filesRes.json();
       if (filesData.success) {
         // Normalize: backend FileModel uses sizeBytes, has no isDirectory/lastModified.
@@ -166,7 +167,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       set({ analysisProgress: 60, isFetchingFiles: false, isFetchingDependencies: true });
 
       // 3. Fetch Dependencies Incremental
-      const depRes = await fetch(`${import.meta.env.VITE_API_URL}/repository/dependencies`, { signal });
+      const depRes = await fetch(`${API_URL}/repository/dependencies`, { signal });
       const depData = await depRes.json();
       if (depData.success) {
         // Normalize: backend GraphNode shape is {id, fileMetadata:{path,name,language,...}, hasSyntaxError}
@@ -194,7 +195,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       set({ analysisProgress: 85, isFetchingDependencies: false, isFetchingGit: true });
 
       // 4. Fetch Git Data Incremental
-      const gitRes = await fetch(`${import.meta.env.VITE_API_URL}/repository/git`, { signal });
+      const gitRes = await fetch(`${API_URL}/repository/git`, { signal });
       const gitData = await gitRes.json();
       if (gitData.success) {
         // Normalize: backend GitCommitNode uses authorName/authorEmail/date (Date object serialized)
@@ -237,20 +238,17 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     if (file.isDirectory) return;
 
     const state = get();
-    
-    // Manage Recent Files
-    const recentFiles = [file, ...state.recentFiles.filter(f => f.path !== file.path)].slice(0, 10);
-    
+
     // Manage Open Tabs
-    let openFiles = [...state.openFiles];
+    const openFiles = [...state.openFiles];
     if (!openFiles.find(f => f.path === file.path)) {
       openFiles.push(file);
     }
 
-    set({ activeFile: file, openFiles, recentFiles, isFileLoading: true, error: null, activeTab: 'code', commandPaletteOpen: false });
+    set({ activeFile: file, openFiles, isFileLoading: true, error: null, activeTab: 'code', commandPaletteOpen: false });
     
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/repository/file-content?path=${encodeURIComponent(file.path)}`);
+      const res = await fetch(`${API_URL}/repository/file-content?path=${encodeURIComponent(file.path)}`);
       const data = await res.json();
       if (get().activeFile?.path === file.path) {
         if (!data.success) throw new Error(data.error?.message || 'Failed to read file');
@@ -291,8 +289,9 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
 
   toggleFolder: (path: string) => {
     const expanded = get().expandedFolders;
-    // Default to true if not present, then toggle
-    const current = expanded[path] === undefined ? true : expanded[path];
+    // Folders render collapsed by default, so an absent entry means "closed".
+    // (Defaulting to true here made the first click on every folder a no-op.)
+    const current = expanded[path] ?? false;
     set({ expandedFolders: { ...expanded, [path]: !current } });
   },
 
@@ -323,8 +322,13 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   },
 
   navigateToGraphNode: (nodeId: string) => {
+    // The highlight stays set until the graph view consumes it via
+    // clearGraphHighlight — a fixed timeout raced against the lazy-loaded
+    // graph chunk and silently dropped the navigation on first use.
     set({ activeTab: 'dependencies', graphHighlightNode: nodeId });
-    // Clear after a short delay so the graph can read and animate it
-    setTimeout(() => set({ graphHighlightNode: null }), 2000);
+  },
+
+  clearGraphHighlight: () => {
+    set({ graphHighlightNode: null });
   },
 }));

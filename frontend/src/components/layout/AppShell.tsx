@@ -186,7 +186,7 @@ export const AppShell: React.FC = () => {
   const store = useRepositoryStore();
   const {
     isAnalyzing, error, metadata, activeTab, setActiveTab,
-    setCommandPaletteOpen, activeFile, closeFile,
+    setCommandPaletteOpen,
     files, dependencies, git, graphHighlightNode,
   } = store;
 
@@ -195,14 +195,12 @@ export const AppShell: React.FC = () => {
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Cmd+K / Ctrl+K — Command Palette
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'p')) {
+      // (Cmd+W is deliberately NOT bound: browsers do not allow intercepting
+      // it, so a "close tab" shortcut would close the browser tab instead and
+      // destroy the un-persisted session.)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setCommandPaletteOpen(true);
-      }
-      // Cmd+W — Close active file tab
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
-        e.preventDefault();
-        if (activeFile) closeFile(activeFile.path);
       }
       // Cmd+S — Save session
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -226,7 +224,7 @@ export const AppShell: React.FC = () => {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [setCommandPaletteOpen, activeFile, closeFile, metadata, files, dependencies, git, toast]);
+  }, [setCommandPaletteOpen, metadata, files, dependencies, git, toast]);
 
   return (
     <div

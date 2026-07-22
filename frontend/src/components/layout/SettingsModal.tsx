@@ -4,7 +4,6 @@ import { X, Keyboard } from 'lucide-react';
 
 const SHORTCUTS = [
   { label: 'Command Palette',  keys: ['⌘', 'K'] },
-  { label: 'Close File Tab',   keys: ['⌘', 'W'] },
   { label: 'Save Session',     keys: ['⌘', 'S'] },
   { label: 'Export PDF',       keys: ['⌘', '⇧', 'E'] },
 ];
