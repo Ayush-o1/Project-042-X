@@ -1,6 +1,17 @@
 import { create } from 'zustand';
-import { API_URL } from '../lib/config';
+import {
+  analyzeRepository,
+  fetchDependencies,
+  fetchFileContent,
+  fetchFiles,
+  fetchGit,
+} from '../api/client';
+import { computeInsights } from '../lib/insightsEngine';
+import type { InsightsResult } from '../lib/insightsEngine';
+import type { AnalysisSession } from '../lib/sessionEngine';
 import type { FileModel, RepositoryMetadata, DependencyGraphData, GitGraphData } from '../types';
+
+export type ActiveTab = 'code' | 'dependencies' | 'git' | 'insights';
 
 interface RepositoryState {
   isAnalyzing: boolean;
@@ -10,18 +21,26 @@ interface RepositoryState {
   analysisProgress: number; // 0 to 100
   abortController: AbortController | null;
   error: string | null;
-  
+
+  /** Resource id of the current analysis; sent with every data request. */
+  analysisId: string | null;
   metadata: RepositoryMetadata | null;
   files: FileModel[];
   dependencies: DependencyGraphData | null;
   git: GitGraphData | null;
-  
+  /**
+   * Derived metrics, computed exactly once per loaded dataset (after analysis
+   * completes or a session loads). Consumers must read this instead of calling
+   * computeInsights themselves.
+   */
+  insights: InsightsResult | null;
+
   // Tabs & Code Viewer
   activeFile: FileModel | null;
   openFiles: FileModel[];
   activeFileContent: string | null;
   isFileLoading: boolean;
-  activeTab: 'code' | 'dependencies' | 'git' | 'insights';
+  activeTab: ActiveTab;
 
   // Deep-link: highlight a specific node in the dependency graph
   graphHighlightNode: string | null;
@@ -39,14 +58,14 @@ interface RepositoryState {
   cancelAnalysis: () => void;
   setActiveFile: (file: FileModel) => Promise<void>;
   closeFile: (path: string) => void;
-  setActiveTab: (tab: 'code' | 'dependencies' | 'git' | 'insights') => void;
+  setActiveTab: (tab: ActiveTab) => void;
   toggleFolder: (path: string) => void;
   toggleFavorite: (file: FileModel) => void;
   setCommandPaletteOpen: (isOpen: boolean) => void;
   setSettingsOpen: (isOpen: boolean) => void;
   setSessionHistoryOpen: (isOpen: boolean) => void;
   setCompareModalOpen: (isOpen: boolean) => void;
-  loadSessionIntoStore: (session: any) => void;
+  loadSessionIntoStore: (session: AnalysisSession) => void;
   /** Navigate to the dependency graph and highlight a specific node */
   navigateToGraphNode: (nodeId: string) => void;
   /** Called by the graph view once it has focused the highlighted node */
@@ -61,12 +80,14 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   analysisProgress: 0,
   abortController: null,
   error: null,
-  
+
+  analysisId: null,
   metadata: null,
   files: [],
   dependencies: null,
   git: null,
-  
+  insights: null,
+
   activeFile: null,
   openFiles: [],
   activeFileContent: null,
@@ -85,24 +106,33 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     const { abortController } = get();
     if (abortController) {
       abortController.abort();
-      set({ 
-        isAnalyzing: false, 
+      set({
+        isAnalyzing: false,
         isFetchingFiles: false,
         isFetchingDependencies: false,
         isFetchingGit: false,
-        analysisProgress: 0, 
-        abortController: null, 
-        error: 'Analysis cancelled by user.' 
+        analysisProgress: 0,
+        abortController: null,
+        error: 'Analysis cancelled by user.'
       });
     }
   },
 
-  loadSessionIntoStore: (session: any) => {
+  loadSessionIntoStore: (session: AnalysisSession) => {
+    // Sessions loaded from IndexedDB carry real Map/Set instances (structured
+    // clone); anything else (e.g. freshly imported JSON) is recomputed.
+    const insights =
+      session.insights && session.insights.moduleMetrics instanceof Map
+        ? session.insights
+        : computeInsights(session.files, session.dependencies, session.git);
+
     set({
+      analysisId: null, // session data is local; backend fetches would be stale
       metadata: session.metadata,
       files: session.files,
       dependencies: session.dependencies,
       git: session.git,
+      insights,
       error: null,
       isAnalyzing: false,
       isFetchingFiles: false,
@@ -117,115 +147,41 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   analyze: async (path: string) => {
     const controller = new AbortController();
     const signal = controller.signal;
-    
-    set({ 
-      isAnalyzing: true, 
-      error: null, 
-      abortController: controller, 
+
+    set({
+      isAnalyzing: true,
+      error: null,
+      abortController: controller,
       analysisProgress: 10,
+      analysisId: null,
       metadata: null,
       files: [],
       dependencies: null,
-      git: null
+      git: null,
+      insights: null,
     });
 
     try {
-      // 1. Fetch Metadata (Core analysis)
-      const res = await fetch(`${API_URL}/repository/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path }),
-        signal
-      });
-      const data = await res.json();
-      
-      if (!data.success) {
-        throw new Error(data.error?.message || 'Failed to analyze repository');
-      }
+      // 1. Run the analysis; the backend returns a resource id used below.
+      const { analysisId, metadata } = await analyzeRepository(path, signal);
+      set({ analysisId, metadata, analysisProgress: 30, isFetchingFiles: true });
 
-      set({ metadata: data.data, analysisProgress: 30, isFetchingFiles: true });
+      // 2-4. Fetch the payloads addressed by the analysis id.
+      const files = await fetchFiles(analysisId, signal);
+      set({ files, analysisProgress: 60, isFetchingFiles: false, isFetchingDependencies: true });
 
-      // 2. Fetch Files Incremental
-      const filesRes = await fetch(`${API_URL}/repository/files`, { signal });
-      const filesData = await filesRes.json();
-      if (filesData.success) {
-        // Normalize: backend FileModel uses sizeBytes, has no isDirectory/lastModified.
-        // Frontend FileModel expects size, isDirectory, lastModified.
-        const normalizedFiles = (filesData.data as any[]).map((f) => ({
-          name: f.name,
-          path: f.path,
-          relativePath: f.relativePath,
-          extension: f.extension,
-          language: f.language,
-          size: f.sizeBytes ?? 0,
-          sizeBytes: f.sizeBytes ?? 0,
-          isDirectory: false,      // backend only returns files, never directories
-          lastModified: 0,         // not tracked by backend
-        }));
-        set({ files: normalizedFiles });
-      }
-      set({ analysisProgress: 60, isFetchingFiles: false, isFetchingDependencies: true });
+      const dependencies = await fetchDependencies(analysisId, signal);
+      set({ dependencies, analysisProgress: 85, isFetchingDependencies: false, isFetchingGit: true });
 
-      // 3. Fetch Dependencies Incremental
-      const depRes = await fetch(`${API_URL}/repository/dependencies`, { signal });
-      const depData = await depRes.json();
-      if (depData.success) {
-        // Normalize: backend GraphNode shape is {id, fileMetadata:{path,name,language,...}, hasSyntaxError}
-        // Frontend DependencyGraphData.GraphNode expects {id, path, name, type}
-        const normalizedDeps = {
-          nodes: (depData.data.nodes as any[]).map((n) => ({
-            id: n.id,
-            path: n.fileMetadata?.path ?? n.id,
-            name: n.fileMetadata?.name ?? n.id.split('/').pop() ?? n.id,
-            type: n.fileMetadata?.language ?? 'Unknown',
-            hasSyntaxError: n.hasSyntaxError ?? false,
-          })),
-          // Normalize: backend GraphEdge shape is {sourceId, targetId, isDynamic, isTypeOnly}
-          // Frontend DependencyGraphData.GraphEdge expects {sourceId, targetId, type}
-          edges: (depData.data.edges as any[]).map((e) => ({
-            sourceId: e.sourceId,
-            targetId: e.targetId,
-            type: e.isDynamic ? 'dynamic' : 'static',
-            isDynamic: e.isDynamic,
-            isTypeOnly: e.isTypeOnly,
-          })),
-        };
-        set({ dependencies: normalizedDeps });
-      }
-      set({ analysisProgress: 85, isFetchingDependencies: false, isFetchingGit: true });
+      const git = await fetchGit(analysisId, signal);
 
-      // 4. Fetch Git Data Incremental
-      const gitRes = await fetch(`${API_URL}/repository/git`, { signal });
-      const gitData = await gitRes.json();
-      if (gitData.success) {
-        // Normalize: backend GitCommitNode uses authorName/authorEmail/date (Date object serialized)
-        // Frontend GitGraphData.GitCommitNode expects author/timestamp (string)
-        const normalizedGit = {
-          head: gitData.data.head,
-          commits: (gitData.data.commits as any[]).map((c) => ({
-            hash: c.hash,
-            parents: c.parents ?? [],
-            author: c.authorName ?? c.author ?? 'Unknown',
-            authorEmail: c.authorEmail ?? '',
-            // date is serialized as ISO string by JSON.stringify on a Date object
-            timestamp: typeof c.date === 'string'
-              ? c.date
-              : (c.timestamp ?? new Date(c.date).toISOString()),
-            message: c.message ?? '',
-            refs: c.refs ?? [],
-            filesChanged: c.filesChanged ?? [],
-          })),
-        };
-        set({ git: normalizedGit });
-      }
+      // 5. Compute derived metrics exactly once for the completed dataset.
+      const insights = computeInsights(files, dependencies, git);
+      set({ git, insights, analysisProgress: 100, isFetchingGit: false });
 
-      set({ analysisProgress: 100, isFetchingGit: false });
-
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        // Fetch aborted — state already cleaned up by cancelAnalysis
-      } else {
-        set({ error: err.message });
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        set({ error: (err as Error).message });
       }
     } finally {
       if (get().abortController === controller) {
@@ -246,17 +202,15 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     }
 
     set({ activeFile: file, openFiles, isFileLoading: true, error: null, activeTab: 'code', commandPaletteOpen: false });
-    
+
     try {
-      const res = await fetch(`${API_URL}/repository/file-content?path=${encodeURIComponent(file.path)}`);
-      const data = await res.json();
+      const content = await fetchFileContent(file.path, state.analysisId ?? undefined);
       if (get().activeFile?.path === file.path) {
-        if (!data.success) throw new Error(data.error?.message || 'Failed to read file');
-        set({ activeFileContent: data.data });
+        set({ activeFileContent: content });
       }
-    } catch (err: any) {
+    } catch (err) {
       if (get().activeFile?.path === file.path) {
-        set({ error: err.message, activeFileContent: null });
+        set({ error: (err as Error).message, activeFileContent: null });
       }
     } finally {
       if (get().activeFile?.path === file.path) {
@@ -283,7 +237,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     set({ openFiles: newOpenFiles, activeFile: newActiveFile, activeFileContent: newContent });
   },
 
-  setActiveTab: (tab: 'code' | 'dependencies' | 'git' | 'insights') => {
+  setActiveTab: (tab: ActiveTab) => {
     set({ activeTab: tab });
   },
 
@@ -308,7 +262,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   setCommandPaletteOpen: (isOpen: boolean) => {
     set({ commandPaletteOpen: isOpen });
   },
-  
+
   setSettingsOpen: (isOpen: boolean) => {
     set({ isSettingsOpen: isOpen });
   },

@@ -29,12 +29,15 @@ export interface GraphNode {
   path: string; // Absolute path
   name: string;
   type: string;
+  hasSyntaxError?: boolean;
 }
 
 export interface GraphEdge {
   sourceId: string;
   targetId: string;
-  type: string; // e.g. 'import'
+  type: string; // 'static' | 'dynamic'
+  isDynamic?: boolean;
+  isTypeOnly?: boolean;
 }
 
 export interface DependencyGraphData {
@@ -46,6 +49,7 @@ export interface GitCommitNode {
   hash: string;
   parents: string[];
   author: string;
+  authorEmail?: string;
   timestamp: string;
   message: string;
   refs: string[];
@@ -55,4 +59,6 @@ export interface GitCommitNode {
 export interface GitGraphData {
   head: string | null;
   commits: GitCommitNode[];
+  /** Total commits in the analysis; may exceed commits.length when capped/paginated. */
+  totalCommits?: number;
 }
