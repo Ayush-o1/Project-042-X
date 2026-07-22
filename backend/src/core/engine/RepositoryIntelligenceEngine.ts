@@ -5,6 +5,17 @@ import { GitIntelligenceEngine } from '../git/GitIntelligenceEngine';
 import { GitGraph } from '../git/types';
 import { RepositoryModel } from '../scanner/types';
 
+export interface AnalyzeOptions {
+  /**
+   * Maximum number of commits to load from git history (newest first).
+   * Defaults to DEFAULT_MAX_COMMITS; huge histories otherwise exhaust memory.
+   */
+  maxCommits?: number;
+}
+
+/** Default commit cap — enough for full history on almost all repositories. */
+export const DEFAULT_MAX_COMMITS = 20000;
+
 export class RepositoryIntelligenceEngine {
   private scanner: RepositoryScanner;
   private astEngine: DependencyExtractionEngine;
@@ -23,12 +34,14 @@ export class RepositoryIntelligenceEngine {
    * @param repoPath Absolute path to the Git repository.
    * @returns The fully unified repository model.
    */
-  public async analyze(repoPath: string): Promise<UnifiedRepositoryModel> {
+  public async analyze(repoPath: string, options?: AnalyzeOptions): Promise<UnifiedRepositoryModel> {
+    const maxCommits = options?.maxCommits ?? DEFAULT_MAX_COMMITS;
+
     // The filesystem/AST pipeline and the git log run as concurrent async
     // operations (interleaved I/O on the event loop — not separate threads)
     // so neither waits on the other's disk access.
     const fileSystemAndAstPromise = this.processFileSystemAndAst(repoPath);
-    const gitPromise = this.gitEngine.analyze(repoPath);
+    const gitPromise = this.gitEngine.analyze(repoPath, maxCommits);
 
     const [{ repoModel, dependencyGraph }, gitGraph] = await Promise.all([
       fileSystemAndAstPromise,

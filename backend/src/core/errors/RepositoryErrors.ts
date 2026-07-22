@@ -25,3 +25,10 @@ export class NoRepositoryAnalyzedError extends Error {
     this.name = 'NoRepositoryAnalyzedError';
   }
 }
+
+export class AnalysisNotFoundError extends Error {
+  constructor(analysisId: string) {
+    super(`Analysis "${analysisId}" was not found. It may have been evicted; re-run the analysis.`);
+    this.name = 'AnalysisNotFoundError';
+  }
+}

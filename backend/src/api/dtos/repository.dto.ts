@@ -10,6 +10,8 @@ const absolutePath = z
 export const AnalyzeRepositorySchema = z.object({
   body: z.object({
     path: absolutePath,
+    /** Optional cap on git history depth (newest first). */
+    maxCommits: z.number().int().positive().max(1_000_000).optional(),
   }),
 });
 

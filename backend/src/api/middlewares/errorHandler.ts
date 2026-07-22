@@ -5,6 +5,7 @@ import {
   FileSystemAccessError,
   FileAccessDeniedError,
   NoRepositoryAnalyzedError,
+  AnalysisNotFoundError,
 } from '../../core/errors/RepositoryErrors';
 import { GitRepositoryError, EmptyGitRepositoryError } from '../../core/errors/GitErrors';
 
@@ -35,6 +36,10 @@ export function errorHandler(err: Error, req: Request, res: Response, next: Next
   } else if (err instanceof NoRepositoryAnalyzedError) {
     statusCode = 404;
     code = 'NOT_ANALYZED';
+    message = err.message;
+  } else if (err instanceof AnalysisNotFoundError) {
+    statusCode = 404;
+    code = 'ANALYSIS_NOT_FOUND';
     message = err.message;
   } else if (err.name === 'ZodError') {
     statusCode = 400;

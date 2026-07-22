@@ -111,4 +111,67 @@ describe('API Routes Integration', () => {
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN_HOST');
   });
+
+  it('should return an analysisId and serve data addressed by it', async () => {
+    const analyzeRes = await request(app)
+      .post('/api/v1/repository/analyze')
+      .send({ path: tempDir });
+    expect(analyzeRes.status).toBe(200);
+    const { analysisId } = analyzeRes.body.data;
+    expect(typeof analysisId).toBe('string');
+    expect(analysisId.length).toBeGreaterThan(0);
+
+    const filesRes = await request(app)
+      .get('/api/v1/repository/files')
+      .query({ analysisId });
+    expect(filesRes.status).toBe(200);
+    expect(filesRes.body.data.length).toBe(1);
+
+    // Unknown id → 404, never another analysis's data
+    const missingRes = await request(app)
+      .get('/api/v1/repository/files')
+      .query({ analysisId: 'does-not-exist' });
+    expect(missingRes.status).toBe(404);
+    expect(missingRes.body.error.code).toBe('ANALYSIS_NOT_FOUND');
+  });
+
+  it('should paginate git history with offset/limit and report totalCommits', async () => {
+    // Add a second commit for a 2-commit history
+    await fs.writeFile(path.join(tempDir, 'second.ts'), 'export const x = 1;');
+    const git = simpleGit(tempDir);
+    await git.add('.');
+    await git.commit('Second commit');
+
+    const analyzeRes = await request(app)
+      .post('/api/v1/repository/analyze')
+      .send({ path: tempDir });
+    const { analysisId } = analyzeRes.body.data;
+
+    const page1 = await request(app)
+      .get('/api/v1/repository/git')
+      .query({ analysisId, offset: 0, limit: 1 });
+    expect(page1.status).toBe(200);
+    expect(page1.body.data.commits.length).toBe(1);
+    expect(page1.body.data.totalCommits).toBe(2);
+    expect(page1.body.data.commits[0].message).toBe('Second commit'); // newest first
+
+    const page2 = await request(app)
+      .get('/api/v1/repository/git')
+      .query({ analysisId, offset: 1, limit: 1 });
+    expect(page2.body.data.commits.length).toBe(1);
+    expect(page2.body.data.commits[0].message).toBe('Initial API test commit');
+  });
+
+  it('should honor the maxCommits analysis option', async () => {
+    await fs.writeFile(path.join(tempDir, 'extra.ts'), 'export const y = 2;');
+    const git = simpleGit(tempDir);
+    await git.add('.');
+    await git.commit('Extra commit');
+
+    const res = await request(app)
+      .post('/api/v1/repository/analyze')
+      .send({ path: tempDir, maxCommits: 1 });
+    expect(res.status).toBe(200);
+    expect(res.body.data.statistics.totalCommits).toBe(1);
+  });
 });
