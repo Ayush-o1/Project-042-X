@@ -2,6 +2,7 @@ import { memo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { GitCommit, GitBranch, Tag, Clock, FileCode, ChevronDown, ChevronUp } from 'lucide-react';
 import { hashAuthor } from '../../lib/authorColors';
+import { laneColor } from './layoutUtils';
 
 export interface CommitNodeData extends Record<string, unknown> {
   hash: string;
@@ -12,6 +13,10 @@ export interface CommitNodeData extends Record<string, unknown> {
   filesChanged?: string[];
   dimmed?: boolean;
   authorColor?: string; // Injected by GitGraphView for coloring
+  /** Branch-topology lane index from assignCommitLanes (layoutUtils),
+   *  colors this node's left border — kept visually distinct from author
+   *  color (the avatar) so "who" and "which lineage" read separately. */
+  lane?: number;
 }
 
 export const CommitNode = memo(({
@@ -33,6 +38,7 @@ export const CommitNode = memo(({
   const datetime = data.timestamp ? new Date(data.timestamp).toLocaleString() : '';
 
   const authorColor = data.authorColor || hashAuthor(data.author || '');
+  const branchColor = laneColor(data.lane ?? 0);
   const filesChanged = data.filesChanged || [];
 
   return (
@@ -42,7 +48,7 @@ export const CommitNode = memo(({
         padding: 'var(--space-4) var(--space-5)',
         backgroundColor: selected ? 'var(--bg-active)' : 'var(--bg-surface)',
         border: `1px solid ${selected ? 'var(--accent)' : 'var(--border-default)'}`,
-        borderLeft: `3px solid ${authorColor}`,
+        borderLeft: `3px solid ${branchColor}`,
         boxShadow: selected ? 'var(--shadow-accent)' : 'var(--shadow-sm)',
         borderRadius: 'var(--radius-lg)',
         width: 300,

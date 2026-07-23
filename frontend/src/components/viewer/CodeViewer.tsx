@@ -24,7 +24,7 @@ import graphql from 'highlight.js/lib/languages/graphql';
 import {
   FileCode, Copy, Check, ChevronRight,
   FileText, FileJson, Image as ImageIcon,
-  File, X, AlertCircle, RefreshCw
+  File, X, AlertCircle, RefreshCw, Network
 } from 'lucide-react';
 
 /* ── Language detection from extension ─────────────────────── */
@@ -181,6 +181,7 @@ export const CodeViewer: React.FC = () => {
   const {
     activeFile, activeFileContent, isFileLoading, fileError,
     openFiles, setActiveFile, closeFile,
+    dependencies, navigateToGraphNode, revealFileInExplorer,
   } = useRepositoryStore(
     useShallow(s => ({
       activeFile: s.activeFile,
@@ -190,8 +191,27 @@ export const CodeViewer: React.FC = () => {
       openFiles: s.openFiles,
       setActiveFile: s.setActiveFile,
       closeFile: s.closeFile,
+      dependencies: s.dependencies,
+      navigateToGraphNode: s.navigateToGraphNode,
+      revealFileInExplorer: s.revealFileInExplorer,
     })),
   );
+
+  // Imports/imported-by counts for the active file — a direct O(E) filter
+  // over the already-loaded dependency edges, not the full insights engine
+  // (which computes much more than this view needs). Ties the Code Viewer
+  // back to the Architecture graph's data instead of feeling like an
+  // isolated file browser.
+  const dependencyCounts = useMemo(() => {
+    if (!dependencies || !activeFile) return null;
+    let imports = 0;
+    let importedBy = 0;
+    for (const e of dependencies.edges) {
+      if (e.sourceId === activeFile.path) imports++;
+      if (e.targetId === activeFile.path) importedBy++;
+    }
+    return { imports, importedBy };
+  }, [dependencies, activeFile]);
 
   // Removed unused hover state — close button visibility handled purely via CSS
 
@@ -283,32 +303,69 @@ export const CodeViewer: React.FC = () => {
           gap: 'var(--space-4)',
         }}
       >
-        {/* Breadcrumb path */}
+        {/* Breadcrumb path — folder segments reveal the file in the Explorer
+            tree (expanding every ancestor), the same "sync tree to active
+            editor" affordance VS Code/Cursor breadcrumbs give you. */}
         <nav aria-label="File path" style={{ display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
-          {pathParts.map((part, i) => (
-            <React.Fragment key={i}>
-              {i > 0 && (
-                <ChevronRight size={12} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
-              )}
-              <span
-                style={{
-                  fontSize: 'var(--text-xs)',
-                  color: i === pathParts.length - 1 ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                  fontWeight: i === pathParts.length - 1 ? 'var(--weight-medium)' : 'var(--weight-normal)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  maxWidth: i === pathParts.length - 1 ? 240 : 100,
-                }}
-              >
-                {part}
-              </span>
-            </React.Fragment>
-          ))}
+          {pathParts.map((part, i) => {
+            const isLast = i === pathParts.length - 1;
+            return (
+              <React.Fragment key={i}>
+                {i > 0 && (
+                  <ChevronRight size={12} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
+                )}
+                {isLast ? (
+                  <span
+                    style={{
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--text-primary)',
+                      fontWeight: 'var(--weight-medium)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: 240,
+                    }}
+                  >
+                    {part}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => revealFileInExplorer(activeFile.path)}
+                    className="breadcrumb-segment"
+                    title="Reveal in Explorer"
+                    style={{
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 'var(--weight-normal)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: 100,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {part}
+                  </button>
+                )}
+              </React.Fragment>
+            );
+          })}
         </nav>
 
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexShrink: 0 }}>
+          {dependencyCounts && (dependencyCounts.imports > 0 || dependencyCounts.importedBy > 0) && (
+            <button
+              type="button"
+              onClick={() => navigateToGraphNode(activeFile.path)}
+              className="link-action"
+              title="View this file's dependencies in the Architecture graph"
+              style={{ padding: 'var(--space-1) var(--space-3)' }}
+            >
+              <Network size={12} />
+              <span>{dependencyCounts.imports} imports · {dependencyCounts.importedBy} importers</span>
+            </button>
+          )}
           {activeFile.language && activeFile.language !== 'Unknown' && (
             <span className="badge badge-default">{activeFile.language}</span>
           )}

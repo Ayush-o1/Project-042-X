@@ -974,6 +974,24 @@ code, pre, kbd {
   flex-shrink: 0;
 }
 
+/* A breadcrumb folder segment — reveals the active file in the Explorer
+   tree. Plain text weight so the breadcrumb still reads as a path, not a
+   row of buttons; only color shifts on hover/focus to signal it's clickable. */
+.breadcrumb-segment {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-fast) var(--ease-default);
+}
+.breadcrumb-segment:hover,
+.breadcrumb-segment:focus-visible {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+
 /* ────────────────────────────────────────────────────────────
    21. GRAPH STYLES
    ──────────────────────────────────────────────────────────── */
@@ -1543,6 +1561,14 @@ code, pre, kbd {
    the same selected/dimmed classes the component already computes. */
 .graph-node:hover:not(.selected):not(.dimmed) {
   transform: scale(1.02);
+}
+
+/* Expanded folder node's clickable "collapse" label — the folder container
+   itself is pointer-events: none (clicks pass through to child file nodes),
+   so only this row needs its own hover affordance. */
+.graph-folder-label:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* Accent-tinted link row used inside a commit's "files changed" list. */

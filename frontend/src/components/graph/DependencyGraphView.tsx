@@ -19,13 +19,15 @@ import type { DagreLayoutRequest, DagreLayoutResponse } from './dagreLayout.work
 import { FileNode } from './FileNode';
 import { FolderNode } from './FolderNode';
 import { CustomEdge } from './CustomEdge';
+import { getFolderPath } from './layoutUtils';
 import { deriveRepoRoot } from '../../lib/insightsEngine';
 import type { ModuleMetrics } from '../../lib/insightsEngine';
+import { fuzzyScore } from '../../lib/fuzzyMatch';
 import {
   Search, ZoomIn, ZoomOut, Maximize, X, ExternalLink, FileCode,
   Network, AlertTriangle, Users, Clock, Filter,
   ChevronDown, GitCommit, ArrowUpRight, ArrowDownRight, Flame,
-  ShieldAlert, EyeOff, CircleDot, Hash, Loader2
+  ShieldAlert, EyeOff, CircleDot, Hash, Loader2, Pin
 } from 'lucide-react';
 
 const nodeTypes = {
@@ -70,13 +72,40 @@ const CustomToolbar = ({
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [activeResultIndex, setActiveResultIndex] = useState(0);
+
+  // Fuzzy-ranked results instead of a single blind jump to the first
+  // substring match — same scoring the Command Palette and Sidebar filter
+  // already use, so all three search entry points behave identically.
+  const results = useMemo(() => {
+    if (!query) return [];
+    return nodes
+      .filter(n => n.type === 'fileNode')
+      .map(n => {
+        const label = (n.data.label as string) || '';
+        const path = (n.data.path as string) || '';
+        const labelMatch = fuzzyScore(label, query);
+        if (labelMatch !== null) return { node: n, score: labelMatch + 100 };
+        const pathMatch = fuzzyScore(path, query);
+        return pathMatch !== null ? { node: n, score: pathMatch } : null;
+      })
+      .filter((x): x is { node: Node; score: number } => x !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map(x => x.node);
+  }, [nodes, query]);
+
+  useEffect(() => { setActiveResultIndex(0); }, [query]);
+
+  const selectResult = (node: Node) => {
+    onSearch(node.id);
+    setQuery('');
+    setFocused(false);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    const found = nodes.find(n =>
-      n.data.path && (n.data.path as string).toLowerCase().includes(query.toLowerCase())
-    );
-    if (found) onSearch(found.id);
+    if (results[activeResultIndex]) selectResult(results[activeResultIndex]);
   };
 
   const iconBtn = (onClick: () => void, icon: React.ReactNode, label: string, active = false) => (
@@ -106,27 +135,71 @@ const CustomToolbar = ({
     >
       {/* Main toolbar */}
       <div className="graph-toolbar">
-        <form onSubmit={handleSearch} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <Search
-            size={13}
-            style={{
-              position: 'absolute', left: 8,
-              color: focused ? 'var(--accent)' : 'var(--text-tertiary)',
-              transition: 'color var(--duration-fast)',
-              pointerEvents: 'none',
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Find node…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            aria-label="Search graph nodes"
-            className="graph-search-input"
-          />
-        </form>
+        <div style={{ position: 'relative' }}>
+          <form onSubmit={handleSearch} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <Search
+              size={13}
+              style={{
+                position: 'absolute', left: 8,
+                color: focused ? 'var(--accent)' : 'var(--text-tertiary)',
+                transition: 'color var(--duration-fast)',
+                pointerEvents: 'none',
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Find node…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              onKeyDown={e => {
+                if (e.key === 'ArrowDown') { e.preventDefault(); setActiveResultIndex(i => Math.min(i + 1, results.length - 1)); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveResultIndex(i => Math.max(i - 1, 0)); }
+                else if (e.key === 'Escape') { setQuery(''); }
+              }}
+              role="combobox"
+              aria-expanded={focused && results.length > 0}
+              aria-autocomplete="list"
+              aria-controls="graph-search-results"
+              aria-activedescendant={results[activeResultIndex] ? `graph-search-option-${activeResultIndex}` : undefined}
+              aria-label="Search graph nodes"
+              className="graph-search-input"
+            />
+          </form>
+          {focused && query && results.length > 0 && (
+            <div
+              id="graph-search-results"
+              role="listbox"
+              aria-label="Matching files"
+              className="dropdown-panel animate-slide-up"
+              style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 260, zIndex: 'var(--z-dropdown)' }}
+            >
+              {results.map((node, i) => (
+                <button
+                  key={node.id}
+                  id={`graph-search-option-${i}`}
+                  role="option"
+                  aria-selected={i === activeResultIndex}
+                  type="button"
+                  className="menu-item"
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => selectResult(node)}
+                  onMouseEnter={() => setActiveResultIndex(i)}
+                  style={{ background: i === activeResultIndex ? 'var(--bg-hover)' : undefined }}
+                >
+                  <span className="menu-item-icon"><FileCode size={13} /></span>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div className="menu-item-title">{node.data.label as string}</div>
+                    <div className="menu-item-subtitle" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {node.data.path as string}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="divider-v-sm" />
         {iconBtn(() => zoomIn({ duration: 800 }), <ZoomIn size={15} />, 'Zoom in')}
         {iconBtn(() => zoomOut({ duration: 800 }), <ZoomOut size={15} />, 'Zoom out')}
@@ -293,6 +366,8 @@ const Inspector = ({
   gitCommitMap,
   gitAuthorsMap,
   gitLastModifiedMap,
+  isPinned,
+  onTogglePin,
 }: {
   node: Node;
   onClose: () => void;
@@ -302,6 +377,10 @@ const Inspector = ({
   gitCommitMap: Map<string, number>;
   gitAuthorsMap: Map<string, string[]>;
   gitLastModifiedMap: Map<string, string>;
+  /** Whether this node's dependency highlight is pinned (persists after the
+   *  mouse leaves it) rather than just hover-previewed. */
+  isPinned: boolean;
+  onTogglePin: () => void;
 }) => {
   const path = node.data.path as string;
   const fileName = path?.split('/').pop() || '';
@@ -374,9 +453,22 @@ const Inspector = ({
             Node Inspector
           </span>
         </div>
-        <button type="button" onClick={onClose} className="btn-icon btn-icon-md" aria-label="Close inspector">
-          <X size={14} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+          <button
+            type="button"
+            onClick={onTogglePin}
+            className="btn-icon btn-icon-md"
+            aria-label={isPinned ? 'Unpin dependency highlight' : 'Pin dependency highlight'}
+            aria-pressed={isPinned}
+            title={isPinned ? 'Highlight pinned — click to unpin' : 'Pin this node’s dependency highlight so it stays visible'}
+            style={{ color: isPinned ? 'var(--accent)' : 'var(--text-tertiary)' }}
+          >
+            <Pin size={14} fill={isPinned ? 'var(--accent)' : 'none'} />
+          </button>
+          <button type="button" onClick={onClose} className="btn-icon btn-icon-md" aria-label="Close inspector">
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Body */}
@@ -567,6 +659,12 @@ const FlowWrapper: React.FC<{
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  // Click-to-pin: persists the focus/dim highlight after the mouse leaves
+  // the node, so you can actually read what you just highlighted instead of
+  // it vanishing the instant you move toward the Inspector. Hovering a
+  // *different* node still gives a temporary preview (see the highlight
+  // effect below); un-hovering reverts to whatever's pinned.
+  const [pinnedNode, setPinnedNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   // The four toggles are durable preferences (persisted across sessions);
   // fileTypeFilter is reset per-analysis below since a leftover '.rs' filter
@@ -583,32 +681,29 @@ const FlowWrapper: React.FC<{
     setFilters(f => f.fileTypeFilter ? { ...f, fileTypeFilter: '' } : f);
   }, [dependencies, setFilters]);
 
+  // ── Folder collapse state — every folder starts collapsed on a genuinely
+  // new dataset (the single highest-leverage fix for "the graph is
+  // overwhelming": most repos have far more files than folders). Expanding
+  // is an explicit per-folder click, not persisted across analyses since the
+  // folder set is repo-specific.
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!dependencies) { setCollapsedFolders(new Set()); return; }
+    const allFolders = new Set<string>();
+    for (const n of dependencies.nodes) {
+      const folder = getFolderPath(n.path);
+      if (folder) allFolders.add(folder);
+    }
+    setCollapsedFolders(allFolders);
+  }, [dependencies]);
+
   // ── O(1) lookups, built once per dataset ───────────────────────────────────
   const fileSizeMap = useMemo(() => {
     const m = new Map<string, number>();
     for (const f of files) m.set(f.path, f.size);
     return m;
   }, [files]);
-
-  /**
-   * Adjacency indexes for hover highlighting. Built once per graph so each
-   * hover traversal is O(V + E); the previous implementation rescanned the
-   * full edge list for every visited node (O(V·E) per hover).
-   */
-  const adjacency = useMemo(() => {
-    const forward = new Map<string, { target: string; edgeId: string }[]>();
-    const reverse = new Map<string, { source: string; edgeId: string }[]>();
-    if (dependencies) {
-      for (const e of dependencies.edges) {
-        const edgeId = `${e.sourceId}-${e.targetId}`;
-        if (!forward.has(e.sourceId)) forward.set(e.sourceId, []);
-        forward.get(e.sourceId)!.push({ target: e.targetId, edgeId });
-        if (!reverse.has(e.targetId)) reverse.set(e.targetId, []);
-        reverse.get(e.targetId)!.push({ source: e.sourceId, edgeId });
-      }
-    }
-    return { forward, reverse };
-  }, [dependencies]);
 
   // ── Build git data lookup maps from raw git data ───────────────────────────
   // Git paths are repo-relative while node ids are absolute, so all maps are
@@ -695,10 +790,18 @@ const FlowWrapper: React.FC<{
       setIsLayouting(false);
     };
     worker.addEventListener('message', handleMessage);
-    worker.postMessage({ requestId, data: dependencies, direction: 'LR' } satisfies DagreLayoutRequest);
+    worker.postMessage({
+      requestId,
+      data: dependencies,
+      direction: 'LR',
+      collapsedFolders: Array.from(collapsedFolders),
+    } satisfies DagreLayoutRequest);
 
     return () => worker.removeEventListener('message', handleMessage);
-  }, [dependencies]);
+    // Re-requests layout whenever collapse state changes too, not just on a
+    // new dataset — expanding/collapsing a folder is a real layout change
+    // (dagre needs to reserve different space), not just a style toggle.
+  }, [dependencies, collapsedFolders]);
 
   // Terminate the worker only when the view itself unmounts, not on every
   // dependency change — it's reused across layout requests. Must null out
@@ -712,6 +815,26 @@ const FlowWrapper: React.FC<{
     layoutWorkerRef.current?.terminate();
     layoutWorkerRef.current = null;
   }, []);
+
+  /**
+   * Adjacency indexes for hover highlighting, built from the worker's
+   * already-resolved edges (rawEdges) rather than the raw dependency data —
+   * that's what makes hovering a node correctly highlight a collapsed
+   * folder standing in for a hidden dependency, instead of only ever
+   * matching individual (possibly-hidden) file ids. O(V+E) to build; O(V+E)
+   * per hover traversal instead of an O(V·E) rescan.
+   */
+  const adjacency = useMemo(() => {
+    const forward = new Map<string, { target: string; edgeId: string }[]>();
+    const reverse = new Map<string, { source: string; edgeId: string }[]>();
+    for (const e of rawEdges) {
+      if (!forward.has(e.source)) forward.set(e.source, []);
+      forward.get(e.source)!.push({ target: e.target, edgeId: e.id });
+      if (!reverse.has(e.target)) reverse.set(e.target, []);
+      reverse.get(e.target)!.push({ source: e.source, edgeId: e.id });
+    }
+    return { forward, reverse };
+  }, [rawEdges]);
 
   // ── Apply insight overlays + filters ─────────────────────────────────────
   useEffect(() => {
@@ -765,11 +888,15 @@ const FlowWrapper: React.FC<{
     setEdges(rawEdges);
   }, [rawNodes, rawEdges, insights, filters, fileSizeMap, setNodes, setEdges]);
 
-  // ── Hover highlight (transitive dependency closure) ───────────────────────
+  // ── Hover/pin highlight (transitive dependency closure) ───────────────────
   // Traverses the memoized adjacency index (O(V+E)) and preserves object
   // identity for untouched nodes/edges so React.memo skips their re-render.
+  // Hovering takes precedence when active (a temporary preview); with
+  // nothing hovered it falls back to whatever's pinned via click, so the
+  // highlight survives the mouse actually leaving the node.
+  const focusNode = hoveredNode ?? pinnedNode;
   useEffect(() => {
-    if (!hoveredNode || !dependencies) {
+    if (!focusNode) {
       setNodes(nds => nds.map(n =>
         n.data.dimmed === false ? n : { ...n, data: { ...n.data, dimmed: false } },
       ));
@@ -802,13 +929,12 @@ const FlowWrapper: React.FC<{
       return { nodes: seen, edges: edgeIds };
     };
 
-    const downstream = walk(hoveredNode, id =>
+    const downstream = walk(focusNode, id =>
       (adjacency.forward.get(id) ?? []).map(e => ({ other: e.target, edgeId: e.edgeId })));
-    const upstream = walk(hoveredNode, id =>
+    const upstream = walk(focusNode, id =>
       (adjacency.reverse.get(id) ?? []).map(e => ({ other: e.source, edgeId: e.edgeId })));
 
     setNodes(nds => nds.map(n => {
-      if (n.type === 'folderNode') return n;
       const dimmed = !downstream.nodes.has(n.id) && !upstream.nodes.has(n.id);
       return n.data.dimmed === dimmed ? n : { ...n, data: { ...n.data, dimmed } };
     }));
@@ -821,7 +947,7 @@ const FlowWrapper: React.FC<{
       if (d?.isIncoming === isIncoming && d?.isOutgoing === isOutgoing && d?.isDimmed === isDimmed) return e;
       return { ...e, data: { ...e.data, isIncoming, isOutgoing, isDimmed } };
     }));
-  }, [hoveredNode, dependencies, adjacency, setNodes, setEdges]);
+  }, [focusNode, adjacency, setNodes, setEdges]);
 
   // ── External highlight (from Insights navigation) ────────────────────────
   // Re-runs when nodes populate so navigation works even while this lazy view
@@ -832,12 +958,35 @@ const FlowWrapper: React.FC<{
     if (found) {
       handleSearchFocus(externalHighlight);
       clearGraphHighlight();
+      return;
+    }
+    // Not currently visible — most likely hidden inside a collapsed folder
+    // (Insights/Code Viewer navigate by absolute file path, which folder
+    // collapse can hide entirely). Expand it; this effect re-fires once the
+    // resulting re-layout makes the node appear, and the branch above then
+    // focuses it normally.
+    const folder = getFolderPath(externalHighlight);
+    if (folder && collapsedFolders.has(folder)) {
+      setCollapsedFolders(prev => {
+        const next = new Set(prev);
+        next.delete(folder);
+        return next;
+      });
     }
   }, [externalHighlight, nodes]); // eslint-disable-line
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
-    if (node.type === 'folderNode') return;
+    if (node.type === 'folderNode') {
+      const folderId = node.id;
+      setCollapsedFolders(prev => {
+        const next = new Set(prev);
+        if (next.has(folderId)) next.delete(folderId); else next.add(folderId);
+        return next;
+      });
+      return;
+    }
     setSelectedNode(node);
+    setPinnedNode(node.id);
   }, []);
 
   const handleOpenFile = (path: string) => {
@@ -858,8 +1007,8 @@ const FlowWrapper: React.FC<{
         }
       }
       setCenter(absoluteX + 125, absoluteY + 40, { zoom: 1.2, duration: 800 });
-      setHoveredNode(nodeId);
-      setSelectedNode(node);
+      setPinnedNode(nodeId);
+      if (node.type !== 'folderNode') setSelectedNode(node);
     }
   };
 
@@ -896,15 +1045,20 @@ const FlowWrapper: React.FC<{
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
-        onNodeMouseEnter={(_, node) => {
-          if (node.type !== 'folderNode') setHoveredNode(node.id);
-        }}
+        onNodeMouseEnter={(_, node) => setHoveredNode(node.id)}
         onNodeMouseLeave={() => setHoveredNode(null)}
-        onPaneClick={() => { setHoveredNode(null); setSelectedNode(null); }}
+        onPaneClick={() => { setHoveredNode(null); setSelectedNode(null); setPinnedNode(null); }}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ duration: 800 }}
+        // Bounded, not fit-all: the previous unconditional fitView would zoom
+        // out as far as needed to fit the entire graph, which on a few
+        // hundred files put every label below legible size before the user
+        // had done anything. Folder-collapse (defaulting to all-collapsed)
+        // already shrinks what's on screen; this caps how far the *initial*
+        // fit can still zoom out on top of that. Manual zoom-out (minZoom
+        // below) remains unrestricted for anyone who wants the full picture.
+        fitViewOptions={{ duration: 800, minZoom: 0.5 }}
         attributionPosition="bottom-right"
         minZoom={0.05}
         maxZoom={2}
@@ -946,13 +1100,15 @@ const FlowWrapper: React.FC<{
           )}
           <Inspector
             node={selectedNode}
-            onClose={() => setSelectedNode(null)}
+            onClose={() => { setSelectedNode(null); if (pinnedNode === selectedNode.id) setPinnedNode(null); }}
             onOpen={handleOpenFile}
             moduleMetrics={insights?.moduleMetrics || new Map()}
             adjacency={adjacency}
             gitCommitMap={gitCommitMap}
             gitAuthorsMap={gitAuthorsMap}
             gitLastModifiedMap={gitLastModifiedMap}
+            isPinned={pinnedNode === selectedNode.id}
+            onTogglePin={() => setPinnedNode(prev => prev === selectedNode.id ? null : selectedNode.id)}
           />
         </>
       )}

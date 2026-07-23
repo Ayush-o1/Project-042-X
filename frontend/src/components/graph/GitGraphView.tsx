@@ -16,8 +16,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { getGitDagreLayout } from './layoutUtils';
 import { CommitNode } from './CommitNode';
 import type { CommitNodeData } from './CommitNode';
-import { Search, ZoomIn, ZoomOut, Maximize, GitBranch, Filter, X, Users, ChevronDown } from 'lucide-react';
+import { Search, ZoomIn, ZoomOut, Maximize, GitBranch, Filter, X, Users, ChevronDown, GitCommit } from 'lucide-react';
 import { hashAuthor } from '../../lib/authorColors';
+import { fuzzyScore } from '../../lib/fuzzyMatch';
 
 // Extended CommitNode wrapper so we can pass onOpenFile
 const CommitNodeWrapper = (props: NodeProps<Node<CommitNodeData>>) => {
@@ -69,14 +70,38 @@ const GitToolbar = ({
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [activeResultIndex, setActiveResultIndex] = useState(0);
+
+  // Fuzzy-ranked results (hash or message) instead of a single blind jump to
+  // the first substring match — same scoring the Architecture graph's search,
+  // Command Palette, and Sidebar filter already use.
+  const results = useMemo(() => {
+    if (!query) return [];
+    return nodes
+      .map(n => {
+        const message = (n.data.message as string) || '';
+        const messageMatch = fuzzyScore(message, query);
+        const hashMatch = fuzzyScore(n.id, query);
+        const best = messageMatch !== null && (hashMatch === null || messageMatch >= hashMatch) ? messageMatch : hashMatch;
+        return best !== null ? { node: n, score: best } : null;
+      })
+      .filter((x): x is { node: Node; score: number } => x !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map(x => x.node);
+  }, [nodes, query]);
+
+  useEffect(() => { setActiveResultIndex(0); }, [query]);
+
+  const selectResult = (node: Node) => {
+    onSearch(node.id);
+    setQuery('');
+    setFocused(false);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    const found = nodes.find(n =>
-      n.id.toLowerCase().includes(query.toLowerCase()) ||
-      ((n.data.message as string) || '').toLowerCase().includes(query.toLowerCase())
-    );
-    if (found) onSearch(found.id);
+    if (results[activeResultIndex]) selectResult(results[activeResultIndex]);
   };
 
   const iconBtn = (onClick: () => void, icon: React.ReactNode, label: string, active = false) => (
@@ -90,10 +115,65 @@ const GitToolbar = ({
   return (
     <Panel position="top-right" style={{ margin: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       <div className="graph-toolbar">
-        <form onSubmit={handleSearch} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <Search size={13} style={{ position: 'absolute', left: 8, color: focused ? 'var(--accent)' : 'var(--text-tertiary)', transition: 'color var(--duration-fast)', pointerEvents: 'none' }} />
-          <input type="text" placeholder="Search commits…" value={query} onChange={e => setQuery(e.target.value)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} aria-label="Search git commits" className="graph-search-input" />
-        </form>
+        <div style={{ position: 'relative' }}>
+          <form onSubmit={handleSearch} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <Search size={13} style={{ position: 'absolute', left: 8, color: focused ? 'var(--accent)' : 'var(--text-tertiary)', transition: 'color var(--duration-fast)', pointerEvents: 'none' }} />
+            <input
+              type="text"
+              placeholder="Search commits…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              onKeyDown={e => {
+                if (e.key === 'ArrowDown') { e.preventDefault(); setActiveResultIndex(i => Math.min(i + 1, results.length - 1)); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveResultIndex(i => Math.max(i - 1, 0)); }
+                else if (e.key === 'Escape') { setQuery(''); }
+              }}
+              role="combobox"
+              aria-expanded={focused && results.length > 0}
+              aria-autocomplete="list"
+              aria-controls="git-search-results"
+              aria-activedescendant={results[activeResultIndex] ? `git-search-option-${activeResultIndex}` : undefined}
+              aria-label="Search git commits"
+              className="graph-search-input"
+            />
+          </form>
+          {focused && query && results.length > 0 && (
+            <div
+              id="git-search-results"
+              role="listbox"
+              aria-label="Matching commits"
+              className="dropdown-panel animate-slide-up"
+              style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 280, zIndex: 'var(--z-dropdown)' }}
+            >
+              {results.map((node, i) => (
+                <button
+                  key={node.id}
+                  id={`git-search-option-${i}`}
+                  role="option"
+                  aria-selected={i === activeResultIndex}
+                  type="button"
+                  className="menu-item"
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => selectResult(node)}
+                  onMouseEnter={() => setActiveResultIndex(i)}
+                  style={{ background: i === activeResultIndex ? 'var(--bg-hover)' : undefined }}
+                >
+                  <span className="menu-item-icon"><GitCommit size={13} /></span>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div className="menu-item-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {node.data.message as string}
+                    </div>
+                    <div className="menu-item-subtitle" style={{ fontFamily: 'var(--font-mono)' }}>
+                      {node.id.substring(0, 7)}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="divider-v-sm" />
         {iconBtn(() => zoomIn({ duration: 800 }), <ZoomIn size={15} />, 'Zoom in')}
         {iconBtn(() => zoomOut({ duration: 800 }), <ZoomOut size={15} />, 'Zoom out')}
@@ -254,14 +334,17 @@ const FlowWrapper: React.FC = () => {
     }
   }, [renderedCommits, setNodes, setEdges]);
 
-  // BFS highlight
+  // BFS highlight. Each edge's own branch-lane color (data.laneColor, set by
+  // getGitDagreLayout) is the resting state instead of a flat gray — restored
+  // here rather than baked into `style` permanently, since this effect
+  // overwrites `style` wholesale on every hover change.
   useEffect(() => {
     if (!hoveredNode) {
       setNodes(nds => nds.map(n => ({ ...n, data: { ...n.data, dimmed: false } })));
       setEdges(eds => eds.map(e => ({
         ...e,
         animated: false,
-        style: { stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1.5, opacity: 1 },
+        style: { stroke: (e.data as { laneColor?: string })?.laneColor ?? 'rgba(255,255,255,0.06)', strokeWidth: 1.5, opacity: 1 },
       })));
       return;
     }
@@ -280,13 +363,14 @@ const FlowWrapper: React.FC = () => {
 
     setEdges(eds => eds.map(e => {
       const isConnected = e.source === hoveredNode || e.target === hoveredNode;
+      const laneColor = (e.data as { laneColor?: string })?.laneColor ?? 'rgba(255,255,255,0.06)';
       return {
         ...e,
         animated: isConnected,
         style: {
-          stroke: isConnected ? 'var(--accent)' : 'rgba(255,255,255,0.04)',
+          stroke: isConnected ? 'var(--accent)' : laneColor,
           strokeWidth: isConnected ? 2.5 : 1,
-          opacity: isConnected ? 1 : 0.08,
+          opacity: isConnected ? 1 : 0.15,
           transition: 'all 250ms ease',
         },
       };
@@ -365,7 +449,11 @@ const FlowWrapper: React.FC = () => {
         onPaneClick={() => setHoveredNode(null)}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ duration: 800 }}
+        // Bounded, not fit-all — see the identical rationale on the
+        // Architecture graph's ReactFlow. A history of a few hundred commits
+        // previously fit-to-window meant every commit card shrank well below
+        // legible size; this caps how far the initial view zooms out.
+        fitViewOptions={{ duration: 800, minZoom: 0.55 }}
         attributionPosition="bottom-right"
         minZoom={0.05}
         maxZoom={2}

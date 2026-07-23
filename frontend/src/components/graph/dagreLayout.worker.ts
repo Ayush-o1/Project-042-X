@@ -15,6 +15,11 @@ export interface DagreLayoutRequest {
   requestId: number;
   data: DependencyGraphData;
   direction: 'TB' | 'LR';
+  /** Folder ids to render collapsed (as one summary node instead of every
+   *  member file). A plain array — Sets structured-clone fine over
+   *  postMessage, but an array keeps the request payload's shape obvious
+   *  from the caller's side without needing to know that detail. */
+  collapsedFolders?: string[];
 }
 
 export interface DagreLayoutResponse {
@@ -26,8 +31,8 @@ export interface DagreLayoutResponse {
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = (e: MessageEvent<DagreLayoutRequest>) => {
-  const { requestId, data, direction } = e.data;
-  const { nodes, edges } = getDagreLayout(data, direction);
+  const { requestId, data, direction, collapsedFolders } = e.data;
+  const { nodes, edges } = getDagreLayout(data, direction, new Set(collapsedFolders));
   const response: DagreLayoutResponse = { requestId, nodes, edges };
   ctx.postMessage(response);
 };

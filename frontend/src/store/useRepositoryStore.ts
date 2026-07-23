@@ -63,6 +63,11 @@ interface RepositoryState {
   closeFile: (path: string) => void;
   setActiveTab: (tab: ActiveTab) => void;
   toggleFolder: (path: string) => void;
+  /** Expands every ancestor folder of a file so it becomes reachable in the
+   *  Explorer tree — used by the Code Viewer's breadcrumb to "reveal" the
+   *  open file in the sidebar, mirroring how Cursor/VS Code sync the tree
+   *  selection to the active editor tab. */
+  revealFileInExplorer: (filePath: string) => void;
   toggleFavorite: (file: FileModel) => void;
   setCommandPaletteOpen: (isOpen: boolean) => void;
   setSettingsOpen: (isOpen: boolean) => void;
@@ -255,6 +260,25 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     // (Defaulting to true here made the first click on every folder a no-op.)
     const current = expanded[path] ?? false;
     set({ expandedFolders: { ...expanded, [path]: !current } });
+  },
+
+  revealFileInExplorer: (filePath: string) => {
+    const { metadata, expandedFolders } = get();
+    if (!metadata) return;
+
+    // Mirrors the Sidebar's own tree-building path math exactly (same
+    // rootPrefix strip + segment join) so the ids line up with what
+    // expandedFolders is actually keyed by.
+    const rootPrefix = metadata.path;
+    let rel = filePath.replace(rootPrefix, '');
+    if (rel.startsWith('/')) rel = rel.substring(1);
+    const parts = rel.split('/');
+
+    const updates: Record<string, boolean> = {};
+    for (let i = 0; i < parts.length - 1; i++) {
+      updates[`${rootPrefix}/${parts.slice(0, i + 1).join('/')}`] = true;
+    }
+    set({ expandedFolders: { ...expandedFolders, ...updates } });
   },
 
   toggleFavorite: (file: FileModel) => {
