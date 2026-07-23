@@ -27,7 +27,8 @@ import {
   Search, ZoomIn, ZoomOut, Maximize, X, ExternalLink, FileCode,
   Network, AlertTriangle, Users, Clock, Filter,
   ChevronDown, GitCommit, ArrowUpRight, ArrowDownRight, Flame,
-  ShieldAlert, EyeOff, CircleDot, Hash, Loader2, Pin
+  ShieldAlert, EyeOff, CircleDot, Hash, Loader2, Pin,
+  ChevronsDownUp, ChevronsUpDown
 } from 'lucide-react';
 
 const nodeTypes = {
@@ -58,6 +59,8 @@ const CustomToolbar = ({
   onFiltersChange,
   fileTypes,
   shiftLeftFor,
+  onCollapseAll,
+  onExpandAll,
 }: {
   nodes: Node[];
   onSearch: (id: string) => void;
@@ -67,6 +70,8 @@ const CustomToolbar = ({
   /** Extra right margin (CSS length) so the toolbar/filter/legend column
    *  doesn't sit underneath the Node Inspector when both are open at once. */
   shiftLeftFor?: string;
+  onCollapseAll: () => void;
+  onExpandAll: () => void;
 }) => {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const [query, setQuery] = useState('');
@@ -204,6 +209,9 @@ const CustomToolbar = ({
         {iconBtn(() => zoomIn({ duration: 800 }), <ZoomIn size={15} />, 'Zoom in')}
         {iconBtn(() => zoomOut({ duration: 800 }), <ZoomOut size={15} />, 'Zoom out')}
         {iconBtn(() => fitView({ duration: 800 }), <Maximize size={15} />, 'Fit view')}
+        <div className="divider-v-sm" />
+        {iconBtn(onCollapseAll, <ChevronsDownUp size={15} />, 'Collapse all folders')}
+        {iconBtn(onExpandAll, <ChevronsUpDown size={15} />, 'Expand all folders')}
         <div className="divider-v-sm" />
         {iconBtn(() => setFilterOpen(v => !v), <Filter size={15} />, 'Filters', filterOpen)}
       </div>
@@ -688,15 +696,22 @@ const FlowWrapper: React.FC<{
   // folder set is repo-specific.
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (!dependencies) { setCollapsedFolders(new Set()); return; }
+  const allFolderIds = useMemo(() => {
+    if (!dependencies) return new Set<string>();
     const allFolders = new Set<string>();
     for (const n of dependencies.nodes) {
       const folder = getFolderPath(n.path);
       if (folder) allFolders.add(folder);
     }
-    setCollapsedFolders(allFolders);
+    return allFolders;
   }, [dependencies]);
+
+  useEffect(() => {
+    setCollapsedFolders(allFolderIds);
+  }, [allFolderIds]);
+
+  const handleCollapseAll = useCallback(() => setCollapsedFolders(new Set(allFolderIds)), [allFolderIds]);
+  const handleExpandAll = useCallback(() => setCollapsedFolders(new Set()), []);
 
   // ── O(1) lookups, built once per dataset ───────────────────────────────────
   const fileSizeMap = useMemo(() => {
@@ -1071,6 +1086,8 @@ const FlowWrapper: React.FC<{
           onFiltersChange={setFilters}
           fileTypes={fileTypes}
           shiftLeftFor={!isCompact && selectedNode ? 'calc(320px + var(--space-4))' : undefined}
+          onCollapseAll={handleCollapseAll}
+          onExpandAll={handleExpandAll}
         />
         <MiniMap
           nodeColor={(n) => {

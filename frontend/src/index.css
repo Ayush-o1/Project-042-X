@@ -1563,6 +1563,17 @@ code, pre, kbd {
   transform: scale(1.02);
 }
 
+/* Smooth repositioning when dagre re-lays-out the graph (folder collapse,
+   day-group toggle, filter changes) instead of nodes jumping instantly to
+   their new slot. Disabled during an active drag so manual dragging stays
+   1:1 with the pointer instead of lagging behind it. */
+.react-flow__node {
+  transition: transform 350ms var(--ease-default);
+}
+.react-flow__node.dragging {
+  transition: none;
+}
+
 /* Expanded folder node's clickable "collapse" label — the folder container
    itself is pointer-events: none (clicks pass through to child file nodes),
    so only this row needs its own hover affordance. */

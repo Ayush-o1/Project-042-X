@@ -24,8 +24,10 @@ import graphql from 'highlight.js/lib/languages/graphql';
 import {
   FileCode, Copy, Check, ChevronRight,
   FileText, FileJson, Image as ImageIcon,
-  File, X, AlertCircle, RefreshCw, Network
+  File, X, AlertCircle, RefreshCw, Network,
+  ListTree, ArrowUpRight, ArrowDownRight, PanelRightClose
 } from 'lucide-react';
+import type { FileModel } from '../../types';
 
 /* ── Language detection from extension ─────────────────────── */
 const EXT_TO_HLJS: Record<string, string> = {
@@ -176,12 +178,33 @@ const HighlightedCode: React.FC<{ content: string; ext?: string }> = ({ content,
   );
 };
 
+/* ── Related Files row ──────────────────────────────────────── */
+const RelatedFileRow: React.FC<{ file: FileModel; onOpen: (f: FileModel) => void }> = ({ file, onOpen }) => (
+  <button
+    type="button"
+    onClick={() => onOpen(file)}
+    className="menu-item"
+    style={{ width: '100%', textAlign: 'left' }}
+    title={file.path}
+  >
+    <span className="menu-item-icon">{getIcon(file.extension)}</span>
+    <div style={{ overflow: 'hidden' }}>
+      <div className="menu-item-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {file.name}
+      </div>
+      <div className="menu-item-subtitle" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {file.path}
+      </div>
+    </div>
+  </button>
+);
+
 /* ── Main Code Viewer ───────────────────────────────────────── */
 export const CodeViewer: React.FC = () => {
   const {
     activeFile, activeFileContent, isFileLoading, fileError,
     openFiles, setActiveFile, closeFile,
-    dependencies, navigateToGraphNode, revealFileInExplorer,
+    dependencies, files, navigateToGraphNode, revealFileInExplorer,
   } = useRepositoryStore(
     useShallow(s => ({
       activeFile: s.activeFile,
@@ -192,10 +215,13 @@ export const CodeViewer: React.FC = () => {
       setActiveFile: s.setActiveFile,
       closeFile: s.closeFile,
       dependencies: s.dependencies,
+      files: s.files,
       navigateToGraphNode: s.navigateToGraphNode,
       revealFileInExplorer: s.revealFileInExplorer,
     })),
   );
+
+  const [showRelated, setShowRelated] = useState(false);
 
   // Imports/imported-by counts for the active file — a direct O(E) filter
   // over the already-loaded dependency edges, not the full insights engine
@@ -212,6 +238,29 @@ export const CodeViewer: React.FC = () => {
     }
     return { imports, importedBy };
   }, [dependencies, activeFile]);
+
+  // Full FileModel lists behind the counts above — resolved once here so the
+  // Related Files panel can render browsable, clickable rows instead of just
+  // a number, without re-deriving anything the header badge already computed.
+  const relatedFiles = useMemo(() => {
+    if (!dependencies || !activeFile) return null;
+    const filesByPath = new Map(files.map(f => [f.path, f]));
+    const imports: FileModel[] = [];
+    const importedBy: FileModel[] = [];
+    for (const e of dependencies.edges) {
+      if (e.sourceId === activeFile.path) {
+        const f = filesByPath.get(e.targetId);
+        if (f) imports.push(f);
+      }
+      if (e.targetId === activeFile.path) {
+        const f = filesByPath.get(e.sourceId);
+        if (f) importedBy.push(f);
+      }
+    }
+    return { imports, importedBy };
+  }, [dependencies, files, activeFile]);
+
+  const hasRelatedFiles = Boolean(relatedFiles && (relatedFiles.imports.length > 0 || relatedFiles.importedBy.length > 0));
 
   // Removed unused hover state — close button visibility handled purely via CSS
 
@@ -355,16 +404,29 @@ export const CodeViewer: React.FC = () => {
         {/* Right actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexShrink: 0 }}>
           {dependencyCounts && (dependencyCounts.imports > 0 || dependencyCounts.importedBy > 0) && (
-            <button
-              type="button"
-              onClick={() => navigateToGraphNode(activeFile.path)}
-              className="link-action"
-              title="View this file's dependencies in the Architecture graph"
-              style={{ padding: 'var(--space-1) var(--space-3)' }}
-            >
-              <Network size={12} />
-              <span>{dependencyCounts.imports} imports · {dependencyCounts.importedBy} importers</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowRelated(v => !v)}
+                className="btn-icon btn-icon-md"
+                aria-label={showRelated ? 'Hide related files' : 'Show related files'}
+                aria-pressed={showRelated}
+                title={showRelated ? 'Hide related files' : 'Browse imports and importers'}
+                style={{ color: showRelated ? 'var(--accent)' : 'var(--text-tertiary)' }}
+              >
+                <ListTree size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateToGraphNode(activeFile.path)}
+                className="link-action"
+                title="View this file's dependencies in the Architecture graph"
+                style={{ padding: 'var(--space-1) var(--space-3)' }}
+              >
+                <Network size={12} />
+                <span>{dependencyCounts.imports} imports · {dependencyCounts.importedBy} importers</span>
+              </button>
+            </>
           )}
           {activeFile.language && activeFile.language !== 'Unknown' && (
             <span className="badge badge-default">{activeFile.language}</span>
@@ -384,7 +446,8 @@ export const CodeViewer: React.FC = () => {
       </div>
 
       {/* ── Content ── */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'row' }}>
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {isFileLoading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', padding: 'var(--space-8)' }}>
             {/* Skeleton lines */}
@@ -444,6 +507,61 @@ export const CodeViewer: React.FC = () => {
             Empty file
           </div>
         )}
+      </div>
+
+      {/* ── Related Files panel — browsable imports/importers, ties the Code
+          Explorer back to the Architecture graph's dependency data instead
+          of it feeling like an isolated file browser. ── */}
+      {showRelated && hasRelatedFiles && relatedFiles && (
+        <div
+          style={{
+            width: 260, flexShrink: 0, overflowY: 'auto',
+            borderLeft: '1px solid var(--border-default)',
+            backgroundColor: 'var(--bg-panel)',
+            display: 'flex', flexDirection: 'column',
+            animation: 'slide-up var(--duration-fast) var(--ease-default)',
+          }}
+        >
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: 'var(--space-4) var(--space-5)',
+            borderBottom: '1px solid var(--border-default)', flexShrink: 0,
+          }}>
+            <span className="field-label">Related Files</span>
+            <button
+              type="button"
+              onClick={() => setShowRelated(false)}
+              className="btn-icon btn-icon-sm"
+              aria-label="Close related files panel"
+            >
+              <PanelRightClose size={13} />
+            </button>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            {relatedFiles.importedBy.length > 0 && (
+              <div>
+                <div className="field-label" style={{ padding: '0 var(--space-2)', marginBottom: 'var(--space-1)' }}>
+                  <ArrowDownRight size={10} /> Imported By ({relatedFiles.importedBy.length})
+                </div>
+                {relatedFiles.importedBy.map(f => (
+                  <RelatedFileRow key={f.path} file={f} onOpen={setActiveFile} />
+                ))}
+              </div>
+            )}
+            {relatedFiles.imports.length > 0 && (
+              <div>
+                <div className="field-label" style={{ padding: '0 var(--space-2)', marginBottom: 'var(--space-1)' }}>
+                  <ArrowUpRight size={10} /> Imports ({relatedFiles.imports.length})
+                </div>
+                {relatedFiles.imports.map(f => (
+                  <RelatedFileRow key={f.path} file={f} onOpen={setActiveFile} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

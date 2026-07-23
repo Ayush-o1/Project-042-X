@@ -211,51 +211,133 @@ export const getDagreLayout = (
   return { nodes: xyNodes, edges: xyEdges };
 };
 
-export const getGitDagreLayout = (data: { commits: GitCommitNode[] }, direction: 'TB' | 'LR' = 'TB') => {
+const COMMIT_NODE_SIZE = { width: 300, height: 80 };
+const DAY_GROUP_NODE_SIZE = { width: 300, height: 92 };
+
+/** The calendar day (repo-local to whatever the commit timestamp encodes) a
+ *  commit falls on, used as its day-group id. Exported so callers can
+ *  enumerate the days present in a commit list without duplicating this. */
+export function getCommitDayKey(timestamp: string): string {
+  return timestamp ? timestamp.split('T')[0] : 'unknown';
+}
+
+export const getGitDagreLayout = (
+  data: { commits: GitCommitNode[] },
+  direction: 'TB' | 'LR' = 'TB',
+  collapsedDays: Set<string> = new Set(),
+) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
   // TB (top-to-bottom) makes git timelines look correct
   dagreGraph.setGraph({ rankdir: direction, nodesep: 50, ranksep: 60 });
 
+  // Lanes are computed on the full, uncollapsed commit list — exactly like
+  // importance tiers in getDagreLayout, a structural property of the real
+  // history that shouldn't shift as the user collapses/expands days.
   const laneOf = assignCommitLanes(data.commits);
 
-  const xyNodes: Node[] = data.commits.map((commit) => ({
-    id: commit.hash,
-    type: 'commitNode',
-    position: { x: 0, y: 0 },
-    data: {
-      hash: commit.hash, message: commit.message, author: commit.author,
-      refs: commit.refs, timestamp: commit.timestamp,
-      lane: laneOf.get(commit.hash) ?? 0,
-    },
-  }));
+  // ── Day membership ──────────────────────────────────────────────────────
+  const dayOfCommit = new Map<string, string>();
+  const dayStats = new Map<string, { count: number; authors: Set<string>; lane: number }>();
+  data.commits.forEach(commit => {
+    const dayKey = getCommitDayKey(commit.timestamp);
+    dayOfCommit.set(commit.hash, dayKey);
+    const stats = dayStats.get(dayKey);
+    if (stats) {
+      stats.count += 1;
+      if (commit.author) stats.authors.add(commit.author);
+    } else {
+      // Commits are newest-first, so the first commit seen for a day is
+      // representative — its lane colors the day-group's border.
+      dayStats.set(dayKey, {
+        count: 1,
+        authors: new Set(commit.author ? [commit.author] : []),
+        lane: laneOf.get(commit.hash) ?? 0,
+      });
+    }
+  });
 
-  const xyEdges: Edge[] = [];
+  /** A collapsed day's group id — namespaced so it can never collide with a
+   *  real commit hash. */
+  const dayNodeId = (dayKey: string) => `day:${dayKey}`;
+  const resolve = (hash: string): string => {
+    const dayKey = dayOfCommit.get(hash);
+    return dayKey && collapsedDays.has(dayKey) ? dayNodeId(dayKey) : hash;
+  };
+  const isHiddenCommit = (hash: string): boolean => {
+    const dayKey = dayOfCommit.get(hash);
+    return Boolean(dayKey && collapsedDays.has(dayKey));
+  };
+
+  const xyNodes: Node[] = [];
+
+  data.commits.forEach((commit) => {
+    if (isHiddenCommit(commit.hash)) return;
+    xyNodes.push({
+      id: commit.hash,
+      type: 'commitNode',
+      position: { x: 0, y: 0 },
+      data: {
+        hash: commit.hash, message: commit.message, author: commit.author,
+        refs: commit.refs, timestamp: commit.timestamp,
+        lane: laneOf.get(commit.hash) ?? 0,
+      },
+    });
+    dagreGraph.setNode(commit.hash, COMMIT_NODE_SIZE);
+  });
+
+  collapsedDays.forEach(dayKey => {
+    const stats = dayStats.get(dayKey);
+    if (!stats) return;
+    const id = dayNodeId(dayKey);
+    xyNodes.push({
+      id,
+      type: 'dayGroupNode',
+      position: { x: 0, y: 0 },
+      data: {
+        dayKey, count: stats.count,
+        authors: Array.from(stats.authors),
+        lane: stats.lane,
+      },
+    });
+    dagreGraph.setNode(id, DAY_GROUP_NODE_SIZE);
+  });
+
+  // ── Edges — same redirect/dedupe/self-loop-drop shape as getDagreLayout's
+  // folder collapse, applied to day-group ids instead of folder ids. ───────
+  const edgeByKey = new Map<string, Edge & { data: { count: number; laneColor: string } }>();
   data.commits.forEach(commit => {
     commit.parents.forEach((parentHash: string) => {
+      const source = resolve(commit.hash);
+      const target = resolve(parentHash);
+      if (source === target) return;
+
+      const key = `${source}-${target}`;
+      const existing = edgeByKey.get(key);
+      if (existing) {
+        existing.data.count += 1;
+        return;
+      }
       // The edge takes the color of the lane it descends FROM (the child
       // commit's lane) — a merge's extra parents render in the color of
       // whichever branch is merging in, not the branch merged into.
       const lane = laneOf.get(commit.hash) ?? 0;
-      xyEdges.push({
-        id: `${commit.hash}-${parentHash}`,
-        source: commit.hash,
-        target: parentHash,
+      edgeByKey.set(key, {
+        id: key,
+        source,
+        target,
         type: 'straight',
         style: { stroke: laneColor(lane), strokeWidth: 2 },
         // The view's hover-highlight effect overwrites `style` wholesale to
         // show/hide the accent-colored "connected to hovered commit" state
         // — data.laneColor is this edge's own branch color, kept out of
         // reach of that so it can be restored once hovering stops.
-        data: { laneColor: laneColor(lane) },
+        data: { laneColor: laneColor(lane), count: 1 },
       });
     });
   });
-
-  xyNodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: 300, height: 80 });
-  });
+  const xyEdges: Edge[] = Array.from(edgeByKey.values());
 
   xyEdges.forEach((edge) => {
     dagreGraph.setEdge(edge.source, edge.target);
@@ -265,9 +347,11 @@ export const getGitDagreLayout = (data: { commits: GitCommitNode[] }, direction:
 
   xyNodes.forEach((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
+    if (!nodeWithPosition) return;
+    const { width, height } = node.type === 'dayGroupNode' ? DAY_GROUP_NODE_SIZE : COMMIT_NODE_SIZE;
     node.position = {
-      x: nodeWithPosition.x - 150,
-      y: nodeWithPosition.y - 40,
+      x: nodeWithPosition.x - width / 2,
+      y: nodeWithPosition.y - height / 2,
     };
   });
 

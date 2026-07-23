@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getDagreLayout, getGitDagreLayout, getFolderPath, assignCommitLanes } from '../layoutUtils';
+import { getDagreLayout, getGitDagreLayout, getFolderPath, assignCommitLanes, getCommitDayKey } from '../layoutUtils';
 import type { DependencyGraphData, GitCommitNode } from '../../../types';
 
 const deps: DependencyGraphData = {
@@ -194,5 +194,58 @@ describe('getGitDagreLayout', () => {
       expect(Number.isFinite(n.position.x)).toBe(true);
       expect(Number.isFinite(n.position.y)).toBe(true);
     }
+  });
+});
+
+describe('getCommitDayKey', () => {
+  it('extracts the date portion of an ISO timestamp', () => {
+    expect(getCommitDayKey('2026-07-23T14:30:00Z')).toBe('2026-07-23');
+  });
+
+  it('falls back to "unknown" for an empty timestamp', () => {
+    expect(getCommitDayKey('')).toBe('unknown');
+  });
+});
+
+describe('getGitDagreLayout — day grouping', () => {
+  const commit = (hash: string, parents: string[], day: string, author = 'A'): GitCommitNode => ({
+    hash, parents, author, timestamp: `${day}T10:00:00Z`, message: `msg ${hash}`, refs: [], filesChanged: [],
+  });
+
+  // Two commits on 2026-07-23, one on 2026-07-22, newest-first.
+  const commits = [
+    commit('c3', ['c2'], '2026-07-23', 'Bob'),
+    commit('c2', ['c1'], '2026-07-23', 'Alice'),
+    commit('c1', [], '2026-07-22', 'Alice'),
+  ];
+
+  it('leaves individual commit nodes untouched when no day is collapsed', () => {
+    const { nodes } = getGitDagreLayout({ commits }, 'TB');
+    expect(nodes.every(n => n.type === 'commitNode')).toBe(true);
+    expect(nodes).toHaveLength(3);
+  });
+
+  it('collapses a day into one summary node with the right count and authors', () => {
+    const { nodes } = getGitDagreLayout({ commits }, 'TB', new Set(['2026-07-23']));
+    const commitNodes = nodes.filter(n => n.type === 'commitNode');
+    const dayNodes = nodes.filter(n => n.type === 'dayGroupNode');
+
+    expect(commitNodes.map(n => n.id)).toEqual(['c1']); // only the un-collapsed day's commit remains
+    expect(dayNodes).toHaveLength(1);
+    expect(dayNodes[0].data.dayKey).toBe('2026-07-23');
+    expect(dayNodes[0].data.count).toBe(2);
+    expect((dayNodes[0].data.authors as string[]).sort()).toEqual(['Alice', 'Bob']);
+  });
+
+  it('redirects an edge crossing into a collapsed day to the day-group id', () => {
+    const { edges } = getGitDagreLayout({ commits }, 'TB', new Set(['2026-07-23']));
+    // c2 -> c1 becomes day:2026-07-23 -> c1 (c2 is hidden inside the group)
+    expect(edges.some(e => e.source === 'day:2026-07-23' && e.target === 'c1')).toBe(true);
+  });
+
+  it('drops an edge that becomes internal to a single collapsed day', () => {
+    const { edges } = getGitDagreLayout({ commits }, 'TB', new Set(['2026-07-23']));
+    // c3 -> c2 are both inside the collapsed day — would be a self-loop.
+    expect(edges.some(e => e.source === 'day:2026-07-23' && e.target === 'day:2026-07-23')).toBe(false);
   });
 });

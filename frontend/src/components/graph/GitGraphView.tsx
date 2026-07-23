@@ -16,7 +16,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { getGitDagreLayout } from './layoutUtils';
 import { CommitNode } from './CommitNode';
 import type { CommitNodeData } from './CommitNode';
-import { Search, ZoomIn, ZoomOut, Maximize, GitBranch, Filter, X, Users, ChevronDown, GitCommit } from 'lucide-react';
+import { DayGroupNode } from './DayGroupNode';
+import { Search, ZoomIn, ZoomOut, Maximize, GitBranch, Filter, X, Users, ChevronDown, GitCommit, CalendarDays, ArrowUpToLine } from 'lucide-react';
 import { hashAuthor } from '../../lib/authorColors';
 import { fuzzyScore } from '../../lib/fuzzyMatch';
 
@@ -33,7 +34,7 @@ const CommitNodeWrapper = (props: NodeProps<Node<CommitNodeData>>) => {
   return <CommitNode {...props} onOpenFile={handleOpenFile} />;
 };
 
-const nodeTypes = { commitNode: CommitNodeWrapper };
+const nodeTypes = { commitNode: CommitNodeWrapper, dayGroupNode: DayGroupNode };
 
 /**
  * Upper bound on commits rendered as graph nodes. Git history can run into
@@ -55,6 +56,9 @@ const GitToolbar = ({
   dateTo,
   onDateFromChange,
   onDateToChange,
+  groupByDay,
+  onToggleGroupByDay,
+  onJumpToLatest,
 }: {
   nodes: Node[];
   onSearch: (id: string) => void;
@@ -65,6 +69,9 @@ const GitToolbar = ({
   dateTo: string;
   onDateFromChange: (d: string) => void;
   onDateToChange: (d: string) => void;
+  groupByDay: boolean;
+  onToggleGroupByDay: () => void;
+  onJumpToLatest: () => void;
 }) => {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const [query, setQuery] = useState('');
@@ -178,6 +185,9 @@ const GitToolbar = ({
         {iconBtn(() => zoomIn({ duration: 800 }), <ZoomIn size={15} />, 'Zoom in')}
         {iconBtn(() => zoomOut({ duration: 800 }), <ZoomOut size={15} />, 'Zoom out')}
         {iconBtn(() => fitView({ duration: 800 }), <Maximize size={15} />, 'Fit view')}
+        {iconBtn(onJumpToLatest, <ArrowUpToLine size={15} />, 'Jump to latest commit')}
+        <div className="divider-v-sm" />
+        {iconBtn(onToggleGroupByDay, <CalendarDays size={15} />, groupByDay ? 'Ungroup commits' : 'Group by day', groupByDay)}
         <div className="divider-v-sm" />
         <div style={{ position: 'relative' }}>
           {iconBtn(() => setFilterOpen(v => !v), <Filter size={15} />, 'Filters', filterOpen || hasActiveFilters)}
@@ -281,6 +291,14 @@ const FlowWrapper: React.FC = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  // Day grouping — off by default; individual commits are already fine for
+  // small/medium histories, so this is an opt-in density reducer rather than
+  // the default view (unlike Architecture's folder collapse, which defaults
+  // to collapsed since that's uncontroversially better for any repo with
+  // folders).
+  const [groupByDay, setGroupByDay] = useState(false);
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
+
   // All unique authors
   const authors = useMemo(() => {
     if (!git) return [];
@@ -312,10 +330,26 @@ const FlowWrapper: React.FC = () => {
   );
   const isCapped = filteredCommits.length > renderedCommits.length;
 
+  // Toggling day grouping on collapses every day; toggling it off restores
+  // every individual commit. Clicking a single day-group node afterward
+  // expands just that day (see onNodeClick below).
+  const toggleGroupByDay = () => {
+    setGroupByDay(prev => {
+      const next = !prev;
+      if (next) {
+        const days = new Set(renderedCommits.map(c => c.timestamp?.split('T')[0] || 'unknown'));
+        setCollapsedDays(days);
+      } else {
+        setCollapsedDays(new Set());
+      }
+      return next;
+    });
+  };
+
   // Rebuild layout when the rendered commit set changes
   useEffect(() => {
     if (renderedCommits.length > 0) {
-      const { nodes: ln, edges: le } = getGitDagreLayout({ commits: renderedCommits }, 'TB');
+      const { nodes: ln, edges: le } = getGitDagreLayout({ commits: renderedCommits }, 'TB', groupByDay ? collapsedDays : undefined);
       const commitsByHash = new Map(renderedCommits.map(c => [c.hash, c]));
       // Inject author color and filesChanged into node data
       const enrichedNodes = ln.map(n => ({
@@ -332,7 +366,7 @@ const FlowWrapper: React.FC = () => {
       setNodes([]);
       setEdges([]);
     }
-  }, [renderedCommits, setNodes, setEdges]);
+  }, [renderedCommits, groupByDay, collapsedDays, setNodes, setEdges]);
 
   // BFS highlight. Each edge's own branch-lane color (data.laneColor, set by
   // getGitDagreLayout) is the resting state instead of a flat gray — restored
@@ -377,12 +411,34 @@ const FlowWrapper: React.FC = () => {
     }));
   }, [hoveredNode, renderedCommits, setNodes, setEdges]);
 
+  const handleNodeClick = (_: React.MouseEvent, node: Node) => {
+    if (node.type !== 'dayGroupNode') return;
+    const dayKey = (node.data as { dayKey?: string }).dayKey;
+    if (!dayKey) return;
+    setCollapsedDays(prev => {
+      const next = new Set(prev);
+      next.delete(dayKey);
+      return next;
+    });
+  };
+
   const handleSearchFocus = (nodeId: string) => {
     const node = nodes.find(n => n.id === nodeId);
     if (node) {
       setCenter(node.position.x + 150, node.position.y + 40, { zoom: 1.2, duration: 800 });
       setHoveredNode(nodeId);
     }
+  };
+
+  // git.commits is newest-first, so renderedCommits[0] is the latest commit —
+  // unless it's inside a collapsed day, in which case its day-group node is
+  // the closest thing to "latest" on screen.
+  const handleJumpToLatest = () => {
+    const latest = renderedCommits[0];
+    if (!latest) return;
+    const dayKey = latest.timestamp?.split('T')[0] || 'unknown';
+    const targetId = groupByDay && collapsedDays.has(dayKey) ? `day:${dayKey}` : latest.hash;
+    handleSearchFocus(targetId);
   };
 
   if (!git) {
@@ -446,6 +502,7 @@ const FlowWrapper: React.FC = () => {
         onEdgesChange={onEdgesChange}
         onNodeMouseEnter={(_, node) => setHoveredNode(node.id)}
         onNodeMouseLeave={() => setHoveredNode(null)}
+        onNodeClick={handleNodeClick}
         onPaneClick={() => setHoveredNode(null)}
         nodeTypes={nodeTypes}
         fitView
@@ -469,6 +526,9 @@ const FlowWrapper: React.FC = () => {
           dateTo={dateTo}
           onDateFromChange={setDateFrom}
           onDateToChange={setDateTo}
+          groupByDay={groupByDay}
+          onToggleGroupByDay={toggleGroupByDay}
+          onJumpToLatest={handleJumpToLatest}
         />
         <MiniMap
           nodeColor={n => {
