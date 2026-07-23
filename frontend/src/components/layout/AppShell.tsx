@@ -1,8 +1,9 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { CommandPalette } from './CommandPalette';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
+import { useMediaQuery, BREAKPOINTS } from '../../hooks/useMediaQuery';
 import {
   Loader2, AlertCircle,
   Network, GitBranch, BarChart2, FileCode,
@@ -143,7 +144,7 @@ const EmptyHero: React.FC = () => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
           gap: 'var(--space-4)',
           maxWidth: 600,
           width: '100%',
@@ -185,6 +186,21 @@ export const AppShell: React.FC = () => {
   );
 
   const toast = useToast();
+
+  // Below the tablet-landscape breakpoint the sidebar can no longer sit
+  // inline without crowding the content — it becomes a slide-in overlay.
+  const isSidebarOverlay = useMediaQuery(`(max-width: ${BREAKPOINTS.tabletLandscape - 1}px)`);
+  const [sidebarOpen, setSidebarOpen] = useState(() => !isSidebarOverlay);
+  const wasOverlay = useRef(isSidebarOverlay);
+
+  useEffect(() => {
+    if (isSidebarOverlay !== wasOverlay.current) {
+      // Entering overlay mode: start closed so it doesn't cover the content
+      // on a resize. Leaving overlay mode: always show the now-inline sidebar.
+      setSidebarOpen(!isSidebarOverlay);
+      wasOverlay.current = isSidebarOverlay;
+    }
+  }, [isSidebarOverlay]);
 
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -230,10 +246,25 @@ export const AppShell: React.FC = () => {
         overflow: 'hidden',
       }}
     >
-      <Header />
+      <Header
+        showSidebarToggle={isSidebarOverlay}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(v => !v)}
+      />
 
-      <div style={{ display: 'flex', overflow: 'hidden' }}>
-        <Sidebar />
+      <div style={{ display: 'flex', overflow: 'hidden', position: 'relative' }}>
+        {isSidebarOverlay && sidebarOpen && (
+          <div
+            className="sidebar-overlay-backdrop"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+        <Sidebar
+          isOverlay={isSidebarOverlay}
+          isOpen={sidebarOpen}
+          onRequestClose={() => setSidebarOpen(false)}
+        />
 
         <main
           style={{

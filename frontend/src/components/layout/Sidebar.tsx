@@ -37,7 +37,7 @@ const getFileIcon = (ext?: string): React.ReactNode => {
 /* ── FileTree row ───────────────────────────────────────────── */
 // Every row selects only the exact slivers of state it needs (not the whole
 // store) so that e.g. toggling one folder re-renders one row, not the tree.
-const FileTreeNode: React.FC<{ node: TreeNode }> = React.memo(({ node }) => {
+const FileTreeNode: React.FC<{ node: TreeNode; closeOverlayOnSelect?: () => void }> = React.memo(({ node, closeOverlayOnSelect }) => {
   const setActiveFile = useRepositoryStore(s => s.setActiveFile);
   const toggleFolder = useRepositoryStore(s => s.toggleFolder);
   const toggleFavorite = useRepositoryStore(s => s.toggleFavorite);
@@ -52,6 +52,7 @@ const FileTreeNode: React.FC<{ node: TreeNode }> = React.memo(({ node }) => {
       if (node.depth > 0) toggleFolder(node.path);
     } else if (node.file) {
       setActiveFile(node.file);
+      closeOverlayOnSelect?.();
     }
   };
 
@@ -123,7 +124,15 @@ const SectionLabel: React.FC<{ label: string; count?: number }> = ({ label, coun
 );
 
 /* ── Main Sidebar ───────────────────────────────────────────── */
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  /** True below the tablet-landscape breakpoint, where the sidebar floats
+   *  above the content instead of sitting inline next to it. */
+  isOverlay: boolean;
+  isOpen: boolean;
+  onRequestClose: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ isOverlay, isOpen, onRequestClose }) => {
   const {
     files, metadata, favorites, openFiles,
     setActiveFile, activeFile, closeFile,
@@ -194,9 +203,15 @@ export const Sidebar: React.FC = () => {
     return flat;
   }, [files, metadata, expandedFolders]);
 
+  const handleFileActivate = (file: FileModel) => {
+    setActiveFile(file);
+    if (isOverlay) onRequestClose();
+  };
+
   return (
     <aside
       aria-label="File explorer"
+      className={`sidebar-aside${isOverlay ? ' sidebar-overlay' : ''}${isOverlay && !isOpen ? ' sidebar-closed' : ''}`}
       style={{
         width: 'var(--sidebar-width)',
         backgroundColor: 'var(--bg-panel)',
@@ -217,10 +232,10 @@ export const Sidebar: React.FC = () => {
               return (
                 <div
                   key={f.path}
-                  onClick={() => setActiveFile(f)}
+                  onClick={() => handleFileActivate(f)}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={e => { if (e.key === 'Enter') setActiveFile(f); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleFileActivate(f); }}
                   aria-label={`Switch to ${f.name}`}
                   className={`sidebar-row flex-between${isActive ? ' active' : ''}`}
                   style={{
@@ -258,10 +273,10 @@ export const Sidebar: React.FC = () => {
               return (
                 <div
                   key={f.path}
-                  onClick={() => setActiveFile(f)}
+                  onClick={() => handleFileActivate(f)}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={e => { if (e.key === 'Enter') setActiveFile(f); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleFileActivate(f); }}
                   aria-label={`Switch to ${f.name}`}
                   className={`sidebar-row${isActive ? ' active' : ''}`}
                   style={{
@@ -289,7 +304,9 @@ export const Sidebar: React.FC = () => {
             <Virtuoso
               style={{ height: '100%' }}
               data={flatVisibleFiles}
-              itemContent={(_, node) => <FileTreeNode node={node} />}
+              itemContent={(_, node) => (
+                <FileTreeNode node={node} closeOverlayOnSelect={isOverlay ? onRequestClose : undefined} />
+              )}
             />
           ) : (
             <div

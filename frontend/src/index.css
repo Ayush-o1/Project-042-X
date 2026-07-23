@@ -144,6 +144,17 @@
   --header-height: 56px;
   --sidebar-width: 280px;
   --tab-bar-height: 48px;
+
+  /* Responsive breakpoints (documentation only — CSS custom properties
+     cannot be referenced inside @media conditions, so every @media rule
+     below uses the literal px value shown here. The JS-side source of
+     truth is frontend/src/hooks/useMediaQuery.ts's BREAKPOINTS constant;
+     keep both in sync.
+       --bp-laptop:           1440px  full desktop layout, no compromises
+       --bp-small-laptop:     1280px  tighter spacing, dashboards may drop a column
+       --bp-tablet-landscape: 1024px  sidebar becomes a collapsible overlay
+       --bp-tablet-portrait:   768px  single-column grids, condensed header
+       --bp-mobile:            480px  minimal chrome */
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -690,6 +701,10 @@ code, pre, kbd {
   flex-direction: column;
   overflow: hidden;
   animation: sheet-in var(--duration-slow) var(--ease-default);
+  /* Caps every modal (Settings/History/Compare/Command Palette) regardless
+     of the fixed inline `width` each one requests, so none of them can
+     overflow a narrow viewport. */
+  max-width: 92vw;
 }
 
 .modal-header {
@@ -1065,6 +1080,37 @@ code, pre, kbd {
 .sidebar-file-item:focus-within .row-hide-action,
 .row-hide-action:focus-visible {
   opacity: 1;
+}
+
+/* Overlay mode (viewport < tablet-landscape breakpoint, driven by the JS
+   useMediaQuery hook in AppShell — see hooks/useMediaQuery.ts). The sidebar
+   floats above the content instead of pushing it, so the graph/dashboard/
+   code viewer keep their full width underneath. */
+.sidebar-aside {
+  transition: transform var(--duration-normal) var(--ease-default);
+}
+.sidebar-aside.sidebar-overlay {
+  position: fixed;
+  top: var(--header-height);
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-overlay);
+  box-shadow: var(--shadow-2xl);
+}
+.sidebar-aside.sidebar-overlay.sidebar-closed {
+  transform: translateX(-100%);
+  visibility: hidden;
+  pointer-events: none;
+}
+.sidebar-overlay-backdrop {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: calc(var(--z-overlay) - 1);
+  animation: fade-in var(--duration-fast) var(--ease-default);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -1498,6 +1544,27 @@ code, pre, kbd {
 .commit-file-link:hover,
 .commit-file-link:focus-visible {
   background: var(--accent-subtle);
+}
+
+/* ────────────────────────────────────────────────────────────
+   24P. HEADER RESPONSIVE (sidebar toggle, action-bar collapsing)
+   ──────────────────────────────────────────────────────────── */
+/* Below small-laptop (1280px) the right-hand action buttons keep their
+   icons (title="" still exposes the label as a tooltip) but drop their text
+   labels, reclaiming space for the center search field before anything
+   collides or wraps. */
+@media (max-width: 1279px) {
+  .header-action-label {
+    display: none;
+  }
+}
+
+/* Below tablet-portrait (768px) the wordmark is redundant next to the repo
+   name badge — drop it so the path input keeps a usable width. */
+@media (max-width: 767px) {
+  .header-wordmark {
+    display: none;
+  }
 }
 
 /* ────────────────────────────────────────────────────────────

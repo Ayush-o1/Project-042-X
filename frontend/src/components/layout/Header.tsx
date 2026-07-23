@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import {
   FolderGit2, Search, XCircle, Settings, Save,
-  Download, Clock, GitCompare, ChevronDown,
+  Download, Clock, GitCompare, ChevronDown, Menu,
   FileImage, FileCode2, FileText, FileJson, Loader2
 } from 'lucide-react';
 import { saveSession } from '../../lib/sessionEngine';
@@ -30,7 +30,14 @@ const EXPORT_ITEMS: ExportItem[] = [
 ];
 
 /* ── Component ──────────────────────────────────────────────── */
-export const Header: React.FC = () => {
+interface HeaderProps {
+  /** Whether the viewport is narrow enough that the sidebar is an overlay. */
+  showSidebarToggle: boolean;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ showSidebarToggle, sidebarOpen, onToggleSidebar }) => {
   const {
     analyze, isAnalyzing, metadata,
     cancelAnalysis, analysisProgress,
@@ -148,8 +155,20 @@ export const Header: React.FC = () => {
         </div>
       )}
 
-      {/* ── Left: Logo & Repo Name ── */}
+      {/* ── Left: Sidebar Toggle, Logo & Repo Name ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexShrink: 0, minWidth: 0 }}>
+        {showSidebarToggle && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="btn-icon btn-icon-lg"
+            title={sidebarOpen ? 'Hide file explorer' : 'Show file explorer'}
+            aria-label={sidebarOpen ? 'Hide file explorer' : 'Show file explorer'}
+            aria-expanded={sidebarOpen}
+          >
+            <Menu size={16} />
+          </button>
+        )}
         <div
           style={{
             width: 30, height: 30,
@@ -164,6 +183,7 @@ export const Header: React.FC = () => {
           <FolderGit2 size={16} />
         </div>
         <span
+          className="header-wordmark"
           style={{
             fontWeight: 'var(--weight-semibold)',
             fontSize: 'var(--text-base)',
@@ -255,7 +275,7 @@ export const Header: React.FC = () => {
               style={{ gap: 'var(--space-2)' }}
             >
               <GitCompare size={14} />
-              <span style={{ fontSize: 'var(--text-xs)' }}>Compare</span>
+              <span className="header-action-label" style={{ fontSize: 'var(--text-xs)' }}>Compare</span>
             </button>
 
             {/* History */}
@@ -268,7 +288,7 @@ export const Header: React.FC = () => {
               style={{ gap: 'var(--space-2)' }}
             >
               <Clock size={14} />
-              <span style={{ fontSize: 'var(--text-xs)' }}>History</span>
+              <span className="header-action-label" style={{ fontSize: 'var(--text-xs)' }}>History</span>
             </button>
 
             {/* Save */}
@@ -281,7 +301,7 @@ export const Header: React.FC = () => {
               style={{ gap: 'var(--space-2)' }}
             >
               <Save size={14} />
-              <span style={{ fontSize: 'var(--text-xs)' }}>Save</span>
+              <span className="header-action-label" style={{ fontSize: 'var(--text-xs)' }}>Save</span>
             </button>
 
             {/* Export Dropdown */}
@@ -300,7 +320,7 @@ export const Header: React.FC = () => {
                   ? <Loader2 size={13} className="animate-spin" />
                   : <Download size={13} />
                 }
-                <span style={{ fontSize: 'var(--text-xs)' }}>Export</span>
+                <span className="header-action-label" style={{ fontSize: 'var(--text-xs)' }}>Export</span>
                 <ChevronDown
                   size={11}
                   style={{
