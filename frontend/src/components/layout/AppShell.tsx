@@ -15,7 +15,7 @@ import { SessionHistory } from './SessionHistory';
 import { CompareSnapshots } from '../insights/CompareSnapshots';
 import { saveSession } from '../../lib/sessionEngine';
 import { useShallow } from 'zustand/react/shallow';
-import { useToast } from '../ui/Toast';
+import { useToast } from '../../hooks/useToast';
 
 /* ── Lazy views ─────────────────────────────────────────────── */
 const CodeViewer = React.lazy(() =>
@@ -237,10 +237,12 @@ export const AppShell: React.FC = () => {
         e.preventDefault();
         const { metadata, insights } = useRepositoryStore.getState();
         if (metadata && insights) {
-          import('../../lib/exportEngine').then(({ exportReportPdf }) => {
-            exportReportPdf(metadata, insights);
-            toast.success('PDF exported', 'Architecture report downloaded.');
-          });
+          import('../../lib/exportEngine')
+            .then(({ exportReportPdf }) => {
+              exportReportPdf(metadata, insights);
+              toast.success('PDF exported', 'Architecture report downloaded.');
+            })
+            .catch(() => toast.error('Export failed', 'Could not generate the PDF file.'));
         }
       }
     };

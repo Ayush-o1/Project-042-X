@@ -116,7 +116,7 @@ Project 042-X/
 │   │   │   ├── insights/         # Dashboard and metric KPI components
 │   │   │   ├── layout/           # AppShell, Sidebar, Header, Modals
 │   │   │   └── viewer/           # Code Viewer implementation
-│   │   ├── hooks/                # useMediaQuery, useFocusTrap, usePersistedState
+│   │   ├── hooks/                # useMediaQuery, useFocusTrap, usePersistedState, useToast
 │   │   ├── lib/                  # Export, Session, Insight, and fuzzy-match algorithms
 │   │   ├── store/                # Zustand global state
 │   │   ├── types/                # Strict TypeScript interfaces

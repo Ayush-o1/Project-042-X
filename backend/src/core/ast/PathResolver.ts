@@ -25,9 +25,19 @@ export class PathResolver {
 
     // 1. Check exact match
     if (await this.fileExists(targetPath)) {
-      const stat = await fs.stat(targetPath);
+      // fileExists (fs.access) and this stat aren't atomic — if the target
+      // is removed in between (e.g. the repo is actively being modified
+      // during analysis), stat throws. Treat that the same as "doesn't
+      // exist" instead of letting it reject the whole dependency graph
+      // build over one vanished file.
+      let stat;
+      try {
+        stat = await fs.stat(targetPath);
+      } catch {
+        return null;
+      }
       if (stat.isFile()) return targetPath;
-      
+
       // If it's a directory, check for index files
       if (stat.isDirectory()) {
         const indexPath = await this.resolveIndexFile(targetPath);

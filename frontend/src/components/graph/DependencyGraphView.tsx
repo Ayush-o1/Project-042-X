@@ -701,8 +701,17 @@ const FlowWrapper: React.FC<{
   }, [dependencies]);
 
   // Terminate the worker only when the view itself unmounts, not on every
-  // dependency change — it's reused across layout requests.
-  useEffect(() => () => layoutWorkerRef.current?.terminate(), []);
+  // dependency change — it's reused across layout requests. Must null out
+  // the ref after terminating: React StrictMode (enabled in main.tsx) mounts
+  // every component twice in development — mount, cleanup, mount again — and
+  // without this, the second mount would see a non-null ref pointing at an
+  // already-terminated worker, silently skip creating a new one, and post
+  // messages into the void forever (the graph would never leave "Laying out
+  // graph…" the first time the Architecture tab opens in `npm run dev`).
+  useEffect(() => () => {
+    layoutWorkerRef.current?.terminate();
+    layoutWorkerRef.current = null;
+  }, []);
 
   // ── Apply insight overlays + filters ─────────────────────────────────────
   useEffect(() => {

@@ -101,7 +101,7 @@ Project 042-X/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/    # React components (Graph, Insights, Layout, Viewer)
-│   │   ├── hooks/         # useMediaQuery, useFocusTrap, usePersistedState
+│   │   ├── hooks/         # useMediaQuery, useFocusTrap, usePersistedState, useToast
 │   │   ├── lib/           # Insights, Export, Session, and fuzzy-match engines
 │   │   └── store/         # Zustand state management
 │   └── package.json

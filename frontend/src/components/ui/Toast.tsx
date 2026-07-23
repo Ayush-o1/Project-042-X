@@ -1,27 +1,7 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { CheckCircle2, XCircle, AlertCircle, Info, X } from 'lucide-react';
-
-/* ── Types ─────────────────────────────────────────────────── */
-export type ToastType = 'success' | 'error' | 'info' | 'warning';
-
-export interface Toast {
-  id: string;
-  type: ToastType;
-  title: string;
-  message?: string;
-  duration?: number;
-}
-
-interface ToastContextValue {
-  toast: (opts: Omit<Toast, 'id'>) => void;
-  success: (title: string, message?: string) => void;
-  error: (title: string, message?: string) => void;
-  info: (title: string, message?: string) => void;
-  warning: (title: string, message?: string) => void;
-}
-
-/* ── Context ────────────────────────────────────────────────── */
-const ToastContext = createContext<ToastContextValue | null>(null);
+import { ToastContext } from '../../hooks/useToast';
+import type { Toast, ToastType } from '../../hooks/useToast';
 
 /* ── Provider ───────────────────────────────────────────────── */
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -29,6 +9,12 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const dismiss = useCallback((id: string) => {
+    // Manual dismiss (the toast's close button) races the auto-dismiss timer
+    // scheduled in toast() below — clear it so it can't fire a second,
+    // redundant dismiss after this one already removed the toast.
+    const autoTimer = timers.current.get(id);
+    if (autoTimer) clearTimeout(autoTimer);
+
     setToasts(prev => prev.map(t => t.id === id ? { ...t, leaving: true } : t));
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
@@ -61,13 +47,6 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </ToastContext.Provider>
   );
-};
-
-/* ── Hook ───────────────────────────────────────────────────── */
-export const useToast = (): ToastContextValue => {
-  const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error('useToast must be used within ToastProvider');
-  return ctx;
 };
 
 /* ── Icons ──────────────────────────────────────────────────── */

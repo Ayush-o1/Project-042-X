@@ -10,7 +10,7 @@ import {
   Download, Trash2, FolderOpen, Upload,
   X, Loader2, Clock, Archive
 } from 'lucide-react';
-import { useToast } from '../ui/Toast';
+import { useToast } from '../../hooks/useToast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 type SessionSummary = Omit<AnalysisSession, 'files' | 'dependencies' | 'git' | 'insights'>;
@@ -33,6 +33,12 @@ export const SessionHistory: React.FC = () => {
 
   useEffect(() => {
     if (isSessionHistoryOpen) refreshSessions();
+    // refreshSessions is a plain function recreated every render (it now
+    // closes over `toast`, whose own context value is a new object on every
+    // ToastProvider render). Depending on it would re-fetch the session list
+    // whenever any toast fires anywhere in the app, not just when this modal
+    // opens — only isSessionHistoryOpen should trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSessionHistoryOpen]);
 
   useEffect(() => {
@@ -53,8 +59,12 @@ export const SessionHistory: React.FC = () => {
   useFocusTrap(sheetRef, isSessionHistoryOpen);
 
   const refreshSessions = async () => {
-    const list = await listSessions();
-    setSessions(list as SessionSummary[]);
+    try {
+      const list = await listSessions();
+      setSessions(list as SessionSummary[]);
+    } catch {
+      toast.error('Could not list sessions', 'Failed to read from IndexedDB.');
+    }
   };
 
   const handleLoad = async (id: string) => {
@@ -79,6 +89,8 @@ export const SessionHistory: React.FC = () => {
         await deleteSession(id);
         await refreshSessions();
         toast.info('Session deleted', `"${name}" removed.`);
+      } catch {
+        toast.error('Delete failed', 'Could not remove the session from IndexedDB.');
       } finally {
         setDeletingId(null);
       }
