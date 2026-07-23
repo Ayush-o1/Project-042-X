@@ -8,12 +8,14 @@ import { usePersistedState } from '../../hooks/usePersistedState';
 import {
   Loader2, AlertCircle,
   Network, GitBranch, BarChart2, FileCode,
-  FolderGit2, ArrowRight, Terminal, Zap
+  FolderGit2, ArrowRight, Terminal, Zap,
+  Clock, FolderOpen
 } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
 import { SessionHistory } from './SessionHistory';
 import { CompareSnapshots } from '../insights/CompareSnapshots';
-import { saveSession } from '../../lib/sessionEngine';
+import { saveSession, listSessions, loadSession } from '../../lib/sessionEngine';
+import type { AnalysisSession } from '../../lib/sessionEngine';
 import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '../../hooks/useToast';
 
@@ -59,15 +61,54 @@ const LoadingView: React.FC<{ message?: string }> = ({ message = 'Loading…' })
 );
 
 /* ── Empty state hero ────────────────────────────────────────── */
+type SessionSummary = Omit<AnalysisSession, 'files' | 'dependencies' | 'git' | 'insights'>;
+
+const RECENT_SESSIONS_SHOWN = 4;
+
+const FEATURE_ITEMS = [
+  { icon: <Network  size={16} />, title: 'AST Dependency Graph', desc: 'Interactive visualization of every import' },
+  { icon: <GitBranch size={16} />, title: 'Git Timeline',         desc: 'Full commit history with branch topology' },
+  { icon: <BarChart2 size={16} />, title: 'Insights Engine',      desc: 'Circular deps, hotspots, fan-in metrics' },
+  { icon: <FileCode  size={16} />, title: 'Code Viewer',          desc: 'Syntax-highlighted source exploration' },
+  { icon: <Zap       size={16} />, title: 'Session Persistence',  desc: 'IndexedDB snapshots, no re-analysis' },
+  { icon: <Terminal  size={16} />, title: 'Export Engine',        desc: 'PDF, Markdown, JSON, PNG, SVG' },
+];
+
 const EmptyHero: React.FC = () => {
-  const FEATURE_ITEMS = [
-    { icon: <Network  size={16} />, title: 'AST Dependency Graph', desc: 'Interactive visualization of every import' },
-    { icon: <GitBranch size={16} />, title: 'Git Timeline',         desc: 'Full commit history with branch topology' },
-    { icon: <BarChart2 size={16} />, title: 'Insights Engine',      desc: 'Circular deps, hotspots, fan-in metrics' },
-    { icon: <FileCode  size={16} />, title: 'Code Viewer',          desc: 'Syntax-highlighted source exploration' },
-    { icon: <Zap       size={16} />, title: 'Session Persistence',  desc: 'IndexedDB snapshots, no re-analysis' },
-    { icon: <Terminal  size={16} />, title: 'Export Engine',        desc: 'PDF, Markdown, JSON, PNG, SVG' },
-  ];
+  const { loadSessionIntoStore, setSessionHistoryOpen } = useRepositoryStore(
+    useShallow(s => ({
+      loadSessionIntoStore: s.loadSessionIntoStore,
+      setSessionHistoryOpen: s.setSessionHistoryOpen,
+    })),
+  );
+  const toast = useToast();
+  const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([]);
+
+  useEffect(() => {
+    listSessions().then(list => setRecentSessions(list as SessionSummary[])).catch(() => {
+      // No saved sessions yet, or IndexedDB is unavailable — the hero's
+      // feature grid is a perfectly good empty state, so this fails silently.
+    });
+  }, []);
+
+  const handleOpenRecent = async (id: string) => {
+    try {
+      const session = await loadSession(id);
+      if (session) {
+        loadSessionIntoStore(session);
+        toast.success('Session restored', `"${session.name}" loaded from IndexedDB.`);
+      }
+    } catch {
+      toast.error('Could not load session', 'Failed to read the snapshot from IndexedDB.');
+    }
+  };
+
+  const focusPathInput = () => {
+    document.getElementById('repo-path-input')?.focus();
+  };
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   return (
     <div
@@ -75,15 +116,15 @@ const EmptyHero: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
         height: '100%',
-        padding: 'var(--space-20)',
+        overflowY: 'auto',
+        padding: 'var(--space-20) var(--space-12)',
         gap: 'var(--space-16)',
         animation: 'fade-in 400ms ease-out',
       }}
     >
       {/* Hero */}
-      <div style={{ textAlign: 'center', maxWidth: 480 }}>
+      <div style={{ textAlign: 'center', maxWidth: 480, marginTop: 'auto' }}>
         <div
           style={{
             width: 64, height: 64,
@@ -116,53 +157,107 @@ const EmptyHero: React.FC = () => {
           lineHeight: 'var(--leading-relaxed)',
           marginBottom: 'var(--space-8)',
         }}>
-          Enter an absolute path to any local Git repository in the bar above.
-          042-X will parse every file, extract dependencies, and reveal
-          the full structure of your codebase.
+          Point 042-X at any local Git repository to parse every file, extract
+          its dependency graph, and reveal the full structure of your codebase
+          — entirely on your machine.
         </p>
 
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-            padding: 'var(--space-2) var(--space-5)',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-full)',
-            fontSize: 'var(--text-xs)',
-            color: 'var(--text-tertiary)',
-            fontFamily: 'var(--font-mono)',
-          }}
+        <button
+          type="button"
+          onClick={focusPathInput}
+          className="btn btn-primary btn-md"
         >
-          <ArrowRight size={12} color="var(--accent)" />
-          /Users/your-username/your-project
-        </div>
+          Analyze a Repository
+          <ArrowRight size={14} />
+        </button>
+        <p style={{
+          fontSize: 'var(--text-2xs)',
+          color: 'var(--text-tertiary)',
+          fontFamily: 'var(--font-mono)',
+          marginTop: 'var(--space-4)',
+        }}>
+          Enter an absolute path in the bar above, e.g. /Users/you/your-project
+        </p>
       </div>
 
+      {/* Recent repositories — only for returning users with saved sessions */}
+      {recentSessions.length > 0 && (
+        <div style={{ width: '100%', maxWidth: 720 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--text-secondary)' }}>
+              <Clock size={13} />
+              <span style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semibold)' }}>Recent Repositories</span>
+            </div>
+            {recentSessions.length > RECENT_SESSIONS_SHOWN && (
+              <button
+                type="button"
+                onClick={() => setSessionHistoryOpen(true)}
+                className="link-action"
+                style={{ fontSize: 'var(--text-2xs)' }}
+              >
+                View all {recentSessions.length}
+              </button>
+            )}
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 'var(--space-4)',
+            }}
+          >
+            {recentSessions.slice(0, RECENT_SESSIONS_SHOWN).map(session => (
+              <button
+                key={session.id}
+                type="button"
+                onClick={() => handleOpenRecent(session.id)}
+                className="feature-card"
+                style={{ textAlign: 'left', cursor: 'pointer' }}
+              >
+                <span style={{ color: 'var(--accent)' }}><FolderOpen size={16} /></span>
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {session.name}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>
+                    {session.metadata.statistics.totalFiles} files · {formatDate(session.timestamp)}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Feature grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: 'var(--space-4)',
-          maxWidth: 600,
-          width: '100%',
-        }}
-      >
-        {FEATURE_ITEMS.map(item => (
-          <div key={item.title} className="feature-card">
-            <span style={{ color: 'var(--accent)' }}>{item.icon}</span>
-            <div>
-              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)', marginBottom: 2 }}>
-                {item.title}
-              </div>
-              <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', lineHeight: 'var(--leading-relaxed)' }}>
-                {item.desc}
+      <div style={{ width: '100%', maxWidth: 600, marginBottom: 'auto' }}>
+        {recentSessions.length > 0 && (
+          <div style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>
+            What 042-X Can Do
+          </div>
+        )}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gap: 'var(--space-4)',
+            width: '100%',
+          }}
+        >
+          {FEATURE_ITEMS.map(item => (
+            <div key={item.title} className="feature-card">
+              <span style={{ color: 'var(--accent)' }}>{item.icon}</span>
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)', marginBottom: 2 }}>
+                  {item.title}
+                </div>
+                <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', lineHeight: 'var(--leading-relaxed)' }}>
+                  {item.desc}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -172,7 +267,7 @@ const EmptyHero: React.FC = () => {
 export const AppShell: React.FC = () => {
   const {
     isAnalyzing, error, metadata, activeTab, setActiveTab,
-    setCommandPaletteOpen, graphHighlightNode,
+    setCommandPaletteOpen, graphHighlightNode, hasCycles,
   } = useRepositoryStore(
     useShallow(s => ({
       isAnalyzing: s.isAnalyzing,
@@ -182,6 +277,10 @@ export const AppShell: React.FC = () => {
       setActiveTab: s.setActiveTab,
       setCommandPaletteOpen: s.setCommandPaletteOpen,
       graphHighlightNode: s.graphHighlightNode,
+      // Only the boolean is selected (not the whole insights object) so this
+      // component doesn't re-render every time an unrelated insights field
+      // changes — it only cares whether the tab needs a warning indicator.
+      hasCycles: (s.insights?.circularDependencies.length ?? 0) > 0,
     })),
   );
 
@@ -318,25 +417,35 @@ export const AppShell: React.FC = () => {
                 (e.currentTarget.querySelector(`#tab-trigger-${nextTab.id}`) as HTMLElement | null)?.focus();
               }}
             >
-              {TABS.map(tab => (
-                <button
-                  key={tab.id}
-                  id={`tab-trigger-${tab.id}`}
-                  type="button"
-                  role="tab"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`tab-btn${activeTab === tab.id ? ' tab-btn-active' : ''}`}
-                  title={tab.description}
-                  aria-label={tab.label}
-                  aria-selected={activeTab === tab.id}
-                  aria-controls="view-panel"
-                  tabIndex={activeTab === tab.id ? 0 : -1}
-                  disabled={!metadata && !isAnalyzing}
-                >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              ))}
+              {TABS.map(tab => {
+                const showWarning = tab.id === 'insights' && hasCycles;
+                return (
+                  <button
+                    key={tab.id}
+                    id={`tab-trigger-${tab.id}`}
+                    type="button"
+                    role="tab"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`tab-btn${activeTab === tab.id ? ' tab-btn-active' : ''}`}
+                    title={showWarning ? `${tab.description} — circular dependencies detected` : tab.description}
+                    aria-label={showWarning ? `${tab.label}, circular dependencies detected` : tab.label}
+                    aria-selected={activeTab === tab.id}
+                    aria-controls="view-panel"
+                    tabIndex={activeTab === tab.id ? 0 : -1}
+                    disabled={!metadata && !isAnalyzing}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                    {showWarning && (
+                      <span
+                        className="status-dot"
+                        aria-hidden="true"
+                        style={{ background: 'var(--color-danger)', marginLeft: -2 }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

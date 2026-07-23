@@ -221,6 +221,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
           />
           <input
             ref={inputRef}
+            id="repo-path-input"
             type="text"
             placeholder="Enter absolute path to repository…"
             value={pathInput}

@@ -1,13 +1,13 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
 import {
   ChevronRight, ChevronDown, File, FileCode2, FileJson,
-  Image as ImageIcon, Star, X, Layers,
-  FileText
+  Image as ImageIcon, Star, X, Layers, FileText, Search, SearchX
 } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
 import type { FileModel } from '../../types';
+import { fuzzyScore } from '../../lib/fuzzyMatch';
 
 /* ── Tree types ─────────────────────────────────────────────── */
 interface TreeNode {
@@ -159,6 +159,30 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOverlay, isOpen, isCollapsed
       expandedFolders: s.expandedFolders,
     })),
   );
+
+  const [query, setQuery] = useState('');
+
+  /* Flat, fuzzy-matched results — bypasses folder expand/collapse entirely
+   * so a match anywhere in the tree is reachable without manually opening
+   * every ancestor folder first. Reuses the same scoring the Command
+   * Palette uses (filename matches ranked above path-only matches) so the
+   * two search entry points behave identically. */
+  const searchResults = useMemo(() => {
+    if (!query) return null;
+    return files
+      .filter((f): f is FileModel => !f.isDirectory)
+      .map(f => {
+        const name = f.name;
+        const nameMatch = fuzzyScore(name, query);
+        if (nameMatch !== null) return { file: f, score: nameMatch + 100 };
+        const pathMatch = fuzzyScore(f.path, query);
+        return pathMatch !== null ? { file: f, score: pathMatch } : null;
+      })
+      .filter((x): x is { file: FileModel; score: number } => x !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 200)
+      .map(x => x.file);
+  }, [files, query]);
 
   /* Build the flat visible tree (memoized) */
   const flatVisibleFiles = useMemo(() => {
@@ -315,8 +339,69 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOverlay, isOpen, isCollapsed
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <SectionLabel label="Explorer" count={files.filter(f => !f.isDirectory).length || undefined} />
 
+        {files.length > 0 && (
+          <div style={{ padding: '0 var(--space-6) var(--space-3)', position: 'relative' }}>
+            <Search
+              size={12}
+              style={{ position: 'absolute', left: 'calc(var(--space-6) + 8px)', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }}
+            />
+            <input
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Filter files…"
+              aria-label="Filter files in explorer"
+              className="input-sm"
+              style={{ width: '100%', paddingLeft: 26, paddingRight: query ? 26 : undefined }}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Clear filter"
+                className="btn-icon btn-icon-sm"
+                style={{ position: 'absolute', right: 'calc(var(--space-6) + 2px)', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }}
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
+        )}
+
         <div style={{ flex: 1 }}>
-          {flatVisibleFiles.length > 0 ? (
+          {searchResults ? (
+            searchResults.length > 0 ? (
+              <div role="tree" aria-label="Filtered files" style={{ height: '100%' }}>
+                <Virtuoso
+                  style={{ height: '100%' }}
+                  data={searchResults}
+                  itemContent={(_, file) => (
+                    <FileTreeNode
+                      node={{ name: file.name, path: file.path, isDirectory: false, file, depth: 0 }}
+                      closeOverlayOnSelect={isOverlay ? onRequestClose : undefined}
+                    />
+                  )}
+                />
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 'var(--space-20)',
+                  gap: 'var(--space-4)',
+                  color: 'var(--text-tertiary)',
+                }}
+              >
+                <SearchX size={24} style={{ opacity: 0.4 }} />
+                <span style={{ fontSize: 'var(--text-xs)', textAlign: 'center', lineHeight: 'var(--leading-relaxed)' }}>
+                  No files match "{query}"
+                </span>
+              </div>
+            )
+          ) : flatVisibleFiles.length > 0 ? (
             <div role="tree" aria-label="Files" style={{ height: '100%' }}>
               <Virtuoso
                 style={{ height: '100%' }}

@@ -214,6 +214,58 @@ const KpiCard: React.FC<{
   );
 };
 
+/* ── Repository Health (rollup of already-computed per-module scores) ── */
+const RepoHealthCard: React.FC<{
+  score: number;
+  moduleCount: number;
+  cycleCount: number;
+  orphanCount: number;
+  unstableCount: number;
+}> = ({ score, moduleCount, cycleCount, orphanCount, unstableCount }) => {
+  const color = score >= 70 ? 'var(--color-success)' : score >= 40 ? 'var(--color-warning)' : 'var(--color-danger)';
+  const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Degraded' : 'Critical';
+
+  return (
+    <Panel
+      title="Repository Health"
+      icon={<Heart size={15} />}
+      iconColor={color}
+      description={`Composite of ${moduleCount} module health scores — the same score behind each entry in Module Health below`}
+      badge={<span className="badge" style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color, border: `1px solid color-mix(in srgb, ${color} 30%, transparent)` }}>{label}</span>}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-10)', flexWrap: 'wrap' }}>
+        <div
+          style={{
+            width: 84, height: 84, borderRadius: '50%', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: `color-mix(in srgb, ${color} 10%, transparent)`,
+            border: `2px solid ${color}`,
+          }}
+        >
+          <span style={{ fontSize: 'var(--text-3xl)', fontWeight: 'var(--weight-bold)', color, fontVariantNumeric: 'tabular-nums' }}>
+            {score}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 'var(--space-8)', flexWrap: 'wrap' }}>
+          <div className="stat-box">
+            <div className="stat-box-label"><AlertTriangle size={10} /> Circular Deps</div>
+            <div className="stat-box-value">{cycleCount}</div>
+          </div>
+          <div className="stat-box">
+            <div className="stat-box-label"><Unlink size={10} /> Orphan Files</div>
+            <div className="stat-box-value">{orphanCount}</div>
+          </div>
+          <div className="stat-box">
+            <div className="stat-box-label"><ShieldAlert size={10} /> Unstable Modules</div>
+            <div className="stat-box-value">{unstableCount}</div>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+};
+
 /* ── Module Health Row ────────────────────────────────────────────── */
 const ModuleHealthRow: React.FC<{ m: ModuleMetrics; onClick: () => void }> = ({ m, onClick }) => {
   const name = m.id.split('/').pop() || m.id;
@@ -335,6 +387,15 @@ export const InsightsDashboard: React.FC = () => {
   const maxModuleSize = insights.largestModules[0]?.size || 1;
   const maxFileTypeCount = insights.fileTypeDistribution[0]?.count || 1;
 
+  // Repository Health is a plain average of the per-module healthScore
+  // values already computed by insightsEngine (no new algorithm) — it just
+  // answers "is this repo healthy?" in one number instead of leaving the
+  // user to synthesize that from 12 separate panels themselves.
+  const moduleMetricsList = Array.from(insights.moduleMetrics.values());
+  const repoHealthScore = moduleMetricsList.length > 0
+    ? Math.round(moduleMetricsList.reduce((sum, m) => sum + m.healthScore, 0) / moduleMetricsList.length)
+    : null;
+
   return (
     <div
       style={{
@@ -364,6 +425,17 @@ export const InsightsDashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ── Repository Health ── */}
+      {repoHealthScore !== null && (
+        <RepoHealthCard
+          score={repoHealthScore}
+          moduleCount={moduleMetricsList.length}
+          cycleCount={insights.circularDependencies.length}
+          orphanCount={insights.orphanFiles.length}
+          unstableCount={insights.unstableModuleCount}
+        />
+      )}
 
       {/* ── KPI Cards ── */}
       <div className="dashboard-kpi-grid">
