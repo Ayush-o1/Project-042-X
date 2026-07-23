@@ -24,18 +24,18 @@ const BarItem: React.FC<{
   const pct = maxValue > 0 ? (value / maxValue) * 100 : 0;
   return (
     <div
-      className="bar-row"
+      className={`bar-row${onClick ? ' bar-row-clickable' : ''}`}
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }) : undefined}
       style={{
         cursor: onClick ? 'pointer' : 'default',
         gap: 'var(--space-2)',
         borderRadius: 'var(--radius-md)',
         padding: onClick ? 'var(--space-2)' : '0',
         margin: onClick ? '-var(--space-2)' : '0',
-        transition: 'background var(--duration-fast)',
       }}
-      onMouseEnter={e => { if (onClick) (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
       <div className="bar-row-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', overflow: 'hidden', maxWidth: '75%' }}>
@@ -77,39 +77,22 @@ const Panel: React.FC<{
   children: React.ReactNode;
   description?: string;
 }> = ({ title, icon, iconColor, badge, children, description }) => (
-  <div
-    style={{
-      background: 'var(--bg-surface)',
-      border: '1px solid var(--border-default)',
-      borderRadius: 'var(--radius-2xl)',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-    }}
-  >
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 'var(--space-6) var(--space-8)',
-        borderBottom: '1px solid var(--border-subtle)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+  <div className="panel">
+    <div className="panel-header">
+      <div className="panel-header-left">
         <span style={{ color: iconColor }}>{icon}</span>
         <div>
-          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)', display: 'block' }}>
+          <span className="panel-title">
             {title}
           </span>
           {description && (
-            <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>{description}</span>
+            <span className="panel-description">{description}</span>
           )}
         </div>
       </div>
       {badge}
     </div>
-    <div style={{ padding: 'var(--space-6) var(--space-8)', flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+    <div className="panel-body">
       {children}
     </div>
   </div>
@@ -186,17 +169,7 @@ const CycleRow: React.FC<{ cycle: string[]; index: number; onNavigate: (id: stri
               key={i}
               type="button"
               onClick={() => onNavigate(file)}
-              style={{
-                fontSize: 'var(--text-xs)', color: 'var(--color-danger)',
-                fontFamily: 'var(--font-mono)', textAlign: 'left',
-                padding: '2px 4px', borderRadius: 4,
-                background: 'transparent',
-                display: 'flex', alignItems: 'center', gap: 4,
-                cursor: 'pointer',
-                transition: 'background var(--duration-fast)',
-              }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--color-danger-subtle)'}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+              className="cycle-file-link"
               title={`Navigate to ${file} in graph`}
             >
               <ArrowRight size={9} />
@@ -228,11 +201,11 @@ const KpiCard: React.FC<{
 
   return (
     <div className="metric-card" title={description}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ width: 32, height: 32, background: iconBg, borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: iconColor }}>
+      <div className="flex-between">
+        <div className="kpi-icon" style={{ background: iconBg, color: iconColor }}>
           {icon}
         </div>
-        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: 'var(--radius-full)', background: statusColors[status], flexShrink: 0 }} />
+        <span className="status-dot" style={{ background: statusColors[status] }} />
       </div>
       <div className="metric-value">{value}</div>
       <div className="metric-label">{label}</div>
@@ -250,16 +223,7 @@ const ModuleHealthRow: React.FC<{ m: ModuleMetrics; onClick: () => void }> = ({ 
     <button
       type="button"
       onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-        padding: 'var(--space-3) var(--space-4)',
-        background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border-subtle)',
-        width: '100%', textAlign: 'left', cursor: 'pointer',
-        transition: 'border-color var(--duration-fast), background var(--duration-fast)',
-      }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'; (e.currentTarget as HTMLElement).style.background = 'var(--bg-active)'; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)'; (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)'; }}
+      className="data-row data-row-interactive"
       title={`Click to view ${m.id} in graph`}
     >
       {/* Health indicator */}
@@ -290,12 +254,7 @@ const PackageRow: React.FC<{ p: PackageMetrics }> = ({ p }) => {
   const name = p.path.split('/').pop() || p.path;
   const healthColor = p.avgHealthScore >= 70 ? 'var(--color-success)' : p.avgHealthScore >= 40 ? 'var(--color-warning)' : 'var(--color-danger)';
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-      padding: 'var(--space-3) var(--space-4)',
-      background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)',
-      border: '1px solid var(--border-subtle)',
-    }}>
+    <div className="data-row">
       <Package size={12} color={healthColor} style={{ flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
@@ -314,8 +273,8 @@ const PackageRow: React.FC<{ p: PackageMetrics }> = ({ p }) => {
 /* ── Author bar ───────────────────────────────────────────────────── */
 const AuthorBar: React.FC<{ author: string; count: number; pct: number; color: string }> = ({ author, count, pct, color }) => (
   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-    <div style={{ width: 24, height: 24, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <span style={{ fontSize: 10, fontWeight: 700, color: 'white' }}>{author.charAt(0).toUpperCase()}</span>
+    <div className="avatar avatar-md" style={{ background: color }}>
+      {author.charAt(0).toUpperCase()}
     </div>
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 3 }}>{author}</div>
@@ -601,16 +560,8 @@ export const InsightsDashboard: React.FC = () => {
                       if (fileModel) setActiveFile(fileModel);
                       navigateToGraphNode(file);
                     }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-                      padding: 'var(--space-2) var(--space-3)',
-                      background: 'var(--bg-elevated)', borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--border-subtle)',
-                      cursor: 'pointer', textAlign: 'left', width: '100%',
-                      transition: 'border-color var(--duration-fast)',
-                    }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)'}
+                    className="data-row data-row-interactive"
+                    style={{ padding: 'var(--space-2) var(--space-3)' }}
                     title={`Navigate to ${file} in graph`}
                   >
                     <FileCode size={11} color="var(--color-warning)" />

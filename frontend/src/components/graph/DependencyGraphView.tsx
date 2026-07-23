@@ -111,31 +111,18 @@ const CustomToolbar = ({
             className="graph-search-input"
           />
         </form>
-        <div style={{ width: 1, height: 20, background: 'var(--border-default)' }} />
+        <div className="divider-v-sm" />
         {iconBtn(() => zoomIn({ duration: 800 }), <ZoomIn size={15} />, 'Zoom in')}
         {iconBtn(() => zoomOut({ duration: 800 }), <ZoomOut size={15} />, 'Zoom out')}
         {iconBtn(() => fitView({ duration: 800 }), <Maximize size={15} />, 'Fit view')}
-        <div style={{ width: 1, height: 20, background: 'var(--border-default)' }} />
+        <div className="divider-v-sm" />
         {iconBtn(() => setFilterOpen(v => !v), <Filter size={15} />, 'Filters', filterOpen)}
       </div>
 
       {/* Filter panel */}
       {filterOpen && (
-        <div
-          style={{
-            background: 'var(--bg-panel)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-xl)',
-            boxShadow: 'var(--shadow-xl)',
-            padding: 'var(--space-5)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-4)',
-            minWidth: 220,
-            animation: 'slide-up var(--duration-fast) var(--ease-default)',
-          }}
-        >
-          <span style={{ fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)' }}>
+        <div className="filter-panel" style={{ minWidth: 220 }}>
+          <span className="field-label">
             Graph Filters
           </span>
 
@@ -160,24 +147,15 @@ const CustomToolbar = ({
                   <span style={{ fontSize: 'var(--text-xs)' }}>{label}</span>
                 </div>
                 <div
+                  role="switch"
+                  aria-checked={val}
+                  aria-label={label}
+                  tabIndex={0}
                   onClick={() => onFiltersChange({ ...filters, [key]: !val })}
-                  style={{
-                    width: 28, height: 16, borderRadius: 8,
-                    background: val ? 'var(--accent)' : 'var(--bg-elevated)',
-                    border: `1px solid ${val ? 'var(--accent)' : 'var(--border-default)'}`,
-                    position: 'relative',
-                    transition: 'all var(--duration-fast)',
-                    cursor: 'pointer',
-                  }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFiltersChange({ ...filters, [key]: !val }); } }}
+                  className={`toggle-track${val ? ' is-on' : ''}`}
                 >
-                  <div style={{
-                    position: 'absolute',
-                    top: 2, left: val ? 12 : 2,
-                    width: 10, height: 10,
-                    borderRadius: '50%',
-                    background: 'white',
-                    transition: 'left var(--duration-fast)',
-                  }} />
+                  <div className="toggle-thumb" />
                 </div>
               </label>
             );
@@ -253,7 +231,7 @@ const CustomToolbar = ({
 
 const InspectorRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div>
-    <div style={{ fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: 'var(--space-1)' }}>
+    <div className="field-label" style={{ marginBottom: 'var(--space-1)' }}>
       {label}
     </div>
     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all', lineHeight: 'var(--leading-relaxed)' }}>
@@ -330,7 +308,7 @@ const Inspector = ({
   const FileList: React.FC<{ paths: string[]; label: string; icon: React.ReactNode; color: string }> = ({ paths, label, icon, color }) => (
     paths.length > 0 ? (
       <div>
-        <div style={{ fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
           {icon} {label} ({paths.length})
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 100, overflowY: 'auto' }}>
@@ -399,7 +377,7 @@ const Inspector = ({
         {/* Health Score */}
         {metrics && (
           <div>
-            <div style={{ fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>
+            <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
               Module Health
             </div>
             <HealthBadge score={metrics.healthScore} />
@@ -408,18 +386,18 @@ const Inspector = ({
 
         {/* Coupling metrics */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
-          <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-1)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className="stat-box">
+            <div className="stat-box-label">
               <ArrowDownRight size={10} /> Fan-In
             </div>
-            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 'var(--weight-bold)', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{inDegree}</div>
+            <div className="stat-box-value">{inDegree}</div>
             <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>importers</div>
           </div>
-          <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-1)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className="stat-box">
+            <div className="stat-box-label">
               <ArrowUpRight size={10} /> Fan-Out
             </div>
-            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 'var(--weight-bold)', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{outDegree}</div>
+            <div className="stat-box-value">{outDegree}</div>
             <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>dependencies</div>
           </div>
         </div>
@@ -427,7 +405,7 @@ const Inspector = ({
         {/* Instability metric */}
         {metrics && (
           <div>
-            <div style={{ fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
               <ShieldAlert size={10} /> Instability (Martin's I)
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
@@ -452,19 +430,19 @@ const Inspector = ({
 
         {/* Git data */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
-          <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className="stat-box">
+            <div className="stat-box-label">
               <GitCommit size={10} /> Commits
             </div>
-            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 'var(--weight-bold)', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+            <div className="stat-box-value">
               {commitCount || '—'}
             </div>
           </div>
-          <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', border: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div className="stat-box">
+            <div className="stat-box-label">
               <Hash size={10} /> Size
             </div>
-            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 'var(--weight-bold)', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+            <div className="stat-box-value">
               {size > 0 ? `${(size / 1024).toFixed(1)}` : '—'}
             </div>
             {size > 0 && <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>KB</div>}
@@ -474,7 +452,7 @@ const Inspector = ({
         {/* Authors */}
         {authors.length > 0 && (
           <div>
-            <div style={{ fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
               <Users size={10} /> Authors
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -812,7 +790,7 @@ const FlowWrapper: React.FC<{
   if (!dependencies) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 'var(--space-6)' }}>
-        <div style={{ width: 56, height: 56, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-2xl)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="empty-state-icon" style={{ marginBottom: 0 }}>
           <Network size={24} style={{ opacity: 0.3 }} />
         </div>
         <div style={{ textAlign: 'center' }}>

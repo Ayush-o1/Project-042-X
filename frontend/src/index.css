@@ -27,7 +27,10 @@
   /* Typography */
   --text-primary:   #f0f0f0;
   --text-secondary: #9b9ba8;
-  --text-tertiary:  #4f4f5a;
+  /* Was #4f4f5a (~2.6:1 on --bg-app) — failed WCAG AA (4.5:1) for the small
+     secondary/caption text it's used for everywhere. Same cool-gray hue,
+     lightened to ~5:1. */
+  --text-tertiary:  #7a7a87;
   --text-disabled:  #333340;
 
   /* Accent — Indigo (distinctive, not generic blue-500) */
@@ -546,6 +549,15 @@ code, pre, kbd {
   width: 1px;
   height: 100%;
   background: var(--border-default);
+  flex-shrink: 0;
+}
+/* Fixed-height variant for toolbars (search bars, header actions) where the
+   divider shouldn't stretch to the full flex-row height. */
+.divider-v-sm {
+  width: 1px;
+  height: 20px;
+  background: var(--border-default);
+  flex-shrink: 0;
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -563,7 +575,8 @@ code, pre, kbd {
     border-color var(--duration-normal) var(--ease-default),
     background var(--duration-normal) var(--ease-default);
 }
-.metric-card:hover {
+.metric-card:hover,
+.metric-card:focus-visible {
   border-color: var(--border-strong);
   background: var(--bg-elevated);
 }
@@ -605,7 +618,8 @@ code, pre, kbd {
   transition: border-color var(--duration-fast) var(--ease-default);
   min-height: 34px;
 }
-.list-item:hover {
+.list-item:hover,
+.list-item:focus-visible {
   border-color: var(--border-default);
 }
 .list-item-label {
@@ -801,10 +815,13 @@ code, pre, kbd {
 }
 
 .empty-state-icon {
-  width: 52px;
-  height: 52px;
+  /* 56px + bg-surface matched the two full-canvas empty states (graph
+     views) already in use; CodeViewer's smaller 48px variant was the
+     one-off, unified here rather than the reverse. */
+  width: 56px;
+  height: 56px;
   border-radius: var(--radius-2xl);
-  background: var(--bg-elevated);
+  background: var(--bg-surface);
   border: 1px solid var(--border-default);
   display: flex;
   align-items: center;
@@ -858,7 +875,8 @@ code, pre, kbd {
   letter-spacing: 0.01em;
 }
 
-.tab-btn:hover:not(.tab-btn-active) {
+.tab-btn:hover:not(.tab-btn-active),
+.tab-btn:focus-visible:not(.tab-btn-active) {
   color: var(--text-secondary);
   background: var(--bg-hover);
 }
@@ -892,7 +910,8 @@ code, pre, kbd {
   color: var(--text-tertiary);
 }
 
-.code-editor-tab:hover {
+.code-editor-tab:hover,
+.code-editor-tab:focus-visible {
   color: var(--text-secondary);
   background: var(--bg-hover);
 }
@@ -917,11 +936,14 @@ code, pre, kbd {
 }
 
 .code-editor-tab:hover .code-editor-tab-close,
-.code-editor-tab-active .code-editor-tab-close {
+.code-editor-tab:focus-within .code-editor-tab-close,
+.code-editor-tab-active .code-editor-tab-close,
+.code-editor-tab-close:focus-visible {
   opacity: 1;
 }
 
-.code-editor-tab-close:hover {
+.code-editor-tab-close:hover,
+.code-editor-tab-close:focus-visible {
   background: var(--bg-active);
   color: var(--text-primary);
 }
@@ -983,24 +1005,66 @@ code, pre, kbd {
 .sidebar-file-item {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: 4px var(--space-3);
+  gap: var(--space-2);
+  padding: 3px var(--space-4);
+  margin-left: var(--space-2);
+  margin-right: var(--space-2);
+  min-height: 26px;
   border-radius: var(--radius-md);
   cursor: pointer;
   font-size: var(--text-xs);
   color: var(--text-secondary);
+  outline: none;
   transition:
     background var(--duration-fast) var(--ease-default),
     color var(--duration-fast) var(--ease-default);
   user-select: none;
 }
-.sidebar-file-item:hover {
+.sidebar-file-item:hover:not(.selected),
+.sidebar-file-item:focus-visible:not(.selected) {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 .sidebar-file-item.selected {
   background: var(--bg-selected);
   color: var(--accent-hover);
+}
+
+/* Generic hoverable row used by the Open Editors / Starred lists. The
+   "active" (currently-open) background/color is data-driven and set inline
+   per row, since the two lists use different active color languages
+   (neutral vs accent) — only the hover mechanism lives here. */
+.sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  min-height: 26px;
+  transition:
+    background var(--duration-fast) var(--ease-default),
+    color var(--duration-fast) var(--ease-default);
+}
+.sidebar-row:hover:not(.active),
+.sidebar-row:focus-visible:not(.active) {
+  background: var(--bg-hover);
+}
+
+/* Action button revealed on row hover/focus instead of only on mouse hover,
+   so keyboard users can reach it too. An inline opacity override (e.g. for
+   an already-favorited file) still takes precedence over this default. */
+.row-hide-action {
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+.sidebar-row:hover .row-hide-action,
+.sidebar-row:focus-within .row-hide-action,
+.sidebar-file-item:hover .row-hide-action,
+.sidebar-file-item:focus-within .row-hide-action,
+.row-hide-action:focus-visible {
+  opacity: 1;
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -1046,6 +1110,394 @@ code, pre, kbd {
   transition: width 250ms var(--ease-out);
   border-radius: 0 var(--radius-full) var(--radius-full) 0;
   box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+}
+
+/* ────────────────────────────────────────────────────────────
+   24B. PANEL (section container used by dashboards & inspectors)
+   ──────────────────────────────────────────────────────────── */
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-2xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-6) var(--space-8);
+  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-4);
+}
+
+.panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.panel-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  display: block;
+}
+
+.panel-description {
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+}
+
+.panel-body {
+  padding: var(--space-6) var(--space-8);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ────────────────────────────────────────────────────────────
+   24C. FIELD LABEL (uppercase caption used above values everywhere)
+   ──────────────────────────────────────────────────────────── */
+.field-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   24D. ICON TILE (rounded icon container used in modal/panel headers)
+   ──────────────────────────────────────────────────────────── */
+.icon-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-tertiary);
+}
+.icon-tile-md { width: 28px; height: 28px; }
+.icon-tile-lg { width: 32px; height: 32px; border-radius: var(--radius-xl); }
+
+/* ────────────────────────────────────────────────────────────
+   24E. STAT BOX (2-up metric block used in inspector panels)
+   ──────────────────────────────────────────────────────────── */
+.stat-box {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+}
+.stat-box-label {
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.stat-box-value {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ────────────────────────────────────────────────────────────
+   24F. AVATAR (initial-letter circle used for authors)
+   ──────────────────────────────────────────────────────────── */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+  color: #fff;
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.avatar-sm { width: 18px; height: 18px; font-size: 9px; }
+.avatar-md { width: 24px; height: 24px; font-size: 10px; }
+
+/* ────────────────────────────────────────────────────────────
+   24G. TOGGLE SWITCH (used by graph/git filter panels)
+   ──────────────────────────────────────────────────────────── */
+.toggle-track {
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  position: relative;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--duration-fast) var(--ease-default), border-color var(--duration-fast) var(--ease-default);
+}
+.toggle-track.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left var(--duration-fast) var(--ease-default);
+}
+.toggle-track.is-on .toggle-thumb {
+  left: 12px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   24H. DATA ROW (hoverable row used by health/package/session lists)
+   ──────────────────────────────────────────────────────────── */
+.data-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  transition: border-color var(--duration-fast) var(--ease-default), background var(--duration-fast) var(--ease-default);
+}
+.data-row-interactive {
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+.data-row-interactive:hover,
+.data-row-interactive:focus-visible {
+  border-color: var(--border-default);
+  background: var(--bg-active);
+}
+
+/* ────────────────────────────────────────────────────────────
+   24I. DROPDOWN PANEL (filter panels, export menu, overflow menus)
+   ──────────────────────────────────────────────────────────── */
+.dropdown-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-2xl);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-xl);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  text-align: left;
+  color: var(--text-secondary);
+  transition: background var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default);
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.menu-item-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.menu-item-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: inherit;
+}
+.menu-item-subtitle {
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+}
+
+/* ────────────────────────────────────────────────────────────
+   24J. STATUS DOT
+   ──────────────────────────────────────────────────────────── */
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ────────────────────────────────────────────────────────────
+   24K. FEATURE CARD (empty-state feature grid)
+   ──────────────────────────────────────────────────────────── */
+.feature-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: border-color var(--duration-normal) var(--ease-default);
+}
+.feature-card:hover,
+.feature-card:focus-visible {
+  border-color: var(--border-strong);
+}
+
+/* ────────────────────────────────────────────────────────────
+   24L. SESSION / RECORD ROW (SessionHistory list items)
+   ──────────────────────────────────────────────────────────── */
+.session-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-default);
+  transition: border-color var(--duration-fast) var(--ease-default), background var(--duration-fast) var(--ease-default);
+}
+.session-row:hover:not(.confirming) {
+  background: var(--bg-elevated);
+}
+.session-row.confirming {
+  border-color: var(--color-danger-border);
+}
+
+/* ────────────────────────────────────────────────────────────
+   24M. LINK ACTION (ghost text button/label with icon, e.g. Import trigger)
+   ──────────────────────────────────────────────────────────── */
+.link-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--accent-hover);
+  cursor: pointer;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg);
+  transition: background var(--duration-fast) var(--ease-default);
+}
+.link-action:hover,
+.link-action:focus-visible {
+  background: var(--accent-subtle);
+}
+
+/* Hoverable bg-surface card row (chrome only — layout/display is set by the
+   consumer, e.g. a CSS grid table row). */
+.hover-row-surface {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  transition: background var(--duration-fast) var(--ease-default);
+}
+.hover-row-surface:hover,
+.hover-row-surface:focus-visible {
+  background: var(--bg-elevated);
+}
+
+/* ────────────────────────────────────────────────────────────
+   24N. INSIGHTS DASHBOARD PRIMITIVES
+   ──────────────────────────────────────────────────────────── */
+/* Clickable bar-row variant (BarItem) — reveals the trailing arrow, which
+   previously had no rule that ever set its opacity back to 1. */
+.bar-row-clickable:hover,
+.bar-row-clickable:focus-visible {
+  background: var(--bg-elevated);
+}
+.bar-row-clickable:hover .bar-arrow,
+.bar-row-clickable:focus-visible .bar-arrow {
+  opacity: 1;
+}
+
+/* KPI icon tile — shape only; background/color are per-metric and stay inline. */
+.kpi-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Danger-tinted link row used inside an expanded cycle list. */
+.cycle-file-link {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+  font-family: var(--font-mono);
+  text-align: left;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default);
+}
+.cycle-file-link:hover,
+.cycle-file-link:focus-visible {
+  background: var(--color-danger-subtle);
+}
+
+/* Filter dropdown panel used by both graph toolbars (Architecture + Git
+   Timeline) — identical chrome, was duplicated verbatim across both files. */
+.filter-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: slide-up var(--duration-fast) var(--ease-default);
+}
+
+/* ────────────────────────────────────────────────────────────
+   24O. GRAPH NODE HOVER (FileNode, CommitNode)
+   ──────────────────────────────────────────────────────────── */
+/* Border/background/box-shadow are data-driven (cycle/hotspot/selected) and
+   stay inline; only the hover-only scale transform moves to CSS, gated by
+   the same selected/dimmed classes the component already computes. */
+.graph-node:hover:not(.selected):not(.dimmed) {
+  transform: scale(1.02);
+}
+
+/* Accent-tinted link row used inside a commit's "files changed" list. */
+.commit-file-link {
+  font-size: var(--text-2xs);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-default);
+}
+.commit-file-link:hover,
+.commit-file-link:focus-visible {
+  background: var(--accent-subtle);
 }
 
 /* ────────────────────────────────────────────────────────────

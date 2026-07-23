@@ -59,6 +59,7 @@ export const FileNode = memo(({ data, selected }: { data: FileNodeData; selected
 
   return (
     <div
+      className={`graph-node${selected ? ' selected' : ''}${data.dimmed ? ' dimmed' : ''}`}
       style={{
         padding: 'var(--space-4) var(--space-5)',
         backgroundColor: bgColor,
@@ -75,8 +76,6 @@ export const FileNode = memo(({ data, selected }: { data: FileNodeData; selected
         transform: selected ? 'scale(1.02)' : 'scale(1)',
         opacity: data.dimmed ? 0.12 : 1,
       }}
-      onMouseEnter={e => { if (!selected && !data.dimmed) (e.currentTarget as HTMLElement).style.transform = 'scale(1.02)'; }}
-      onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
     >
       <Handle type="target" position={Position.Left} style={{ background: 'var(--accent)', border: 'none', width: 6, height: 6 }} />
       {icon}

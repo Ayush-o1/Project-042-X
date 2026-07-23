@@ -31,7 +31,7 @@ export const CustomEdge = memo(({
   let animationClass = '';
 
   if (isOutgoing) {
-    strokeColor = 'var(--accent-blue)';
+    strokeColor = 'var(--accent)';
     strokeWidth = 2;
     animationClass = 'animated-edge-outgoing';
   } else if (isIncoming) {

@@ -128,7 +128,7 @@ export const getGitDagreLayout = (data: { commits: GitCommitNode[] }, direction:
         source: commit.hash,
         target: parentHash,
         type: 'straight',
-        style: { stroke: 'var(--accent-blue)', strokeWidth: 2 }
+        style: { stroke: 'var(--accent)', strokeWidth: 2 }
       });
     });
   });

@@ -313,16 +313,11 @@ export const Header: React.FC = () => {
 
               {exportOpen && (
                 <div
-                  className="animate-slide-up"
+                  className="animate-slide-up dropdown-panel"
                   style={{
                     position: 'absolute',
                     top: 'calc(100% + 6px)',
                     right: 0,
-                    background: 'var(--bg-panel)',
-                    border: '1px solid var(--border-strong)',
-                    borderRadius: 'var(--radius-2xl)',
-                    padding: 'var(--space-2)',
-                    boxShadow: 'var(--shadow-xl)',
                     zIndex: 'var(--z-dropdown)',
                     minWidth: 200,
                   }}
@@ -332,32 +327,14 @@ export const Header: React.FC = () => {
                       key={item.format}
                       type="button"
                       onClick={() => handleExport(item.format)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 'var(--space-4)',
-                        width: '100%',
-                        padding: 'var(--space-3) var(--space-4)',
-                        borderRadius: 'var(--radius-lg)',
-                        textAlign: 'left',
-                        color: 'var(--text-secondary)',
-                        transition: 'background var(--duration-fast), color var(--duration-fast)',
-                      }}
-                      onMouseEnter={e => {
-                        (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)';
-                        (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)';
-                      }}
-                      onMouseLeave={e => {
-                        (e.currentTarget as HTMLElement).style.background = 'transparent';
-                        (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
-                      }}
+                      className="menu-item"
                     >
-                      <span style={{ color: 'var(--text-tertiary)' }}>{item.icon}</span>
+                      <span className="menu-item-icon">{item.icon}</span>
                       <div>
-                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'inherit' }}>
+                        <div className="menu-item-title">
                           {item.label}
                         </div>
-                        <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>
+                        <div className="menu-item-subtitle">
                           {item.description}
                         </div>
                       </div>
@@ -367,7 +344,7 @@ export const Header: React.FC = () => {
               )}
             </div>
 
-            <div style={{ width: 1, height: 20, background: 'var(--border-default)', flexShrink: 0 }} />
+            <div className="divider-v-sm" />
           </>
         )}
 

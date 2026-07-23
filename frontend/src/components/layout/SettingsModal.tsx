@@ -43,16 +43,7 @@ export const SettingsModal: React.FC = () => {
       <div className="modal-sheet" style={{ width: 480 }}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-            <div
-              style={{
-                width: 28, height: 28,
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 'var(--radius-lg)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--text-tertiary)',
-              }}
-            >
+            <div className="icon-tile icon-tile-md">
               <Keyboard size={14} />
             </div>
             <h2 id="settings-title" className="modal-title">Keyboard Shortcuts</h2>

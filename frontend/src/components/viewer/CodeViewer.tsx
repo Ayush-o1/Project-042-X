@@ -174,16 +174,7 @@ export const CodeViewer: React.FC = () => {
           animation: 'fade-in 300ms ease-out',
         }}
       >
-        <div
-          style={{
-            width: 48, height: 48,
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-2xl)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 'var(--space-4)',
-          }}
-        >
+        <div className="empty-state-icon">
           <FileCode size={22} style={{ opacity: 0.4 }} />
         </div>
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
@@ -234,10 +225,7 @@ export const CodeViewer: React.FC = () => {
                   type="button"
                   className="code-editor-tab-close"
                   onClick={e => { e.stopPropagation(); closeFile(f.path); }}
-                  onMouseEnter={e => e.stopPropagation()}
-                  onMouseLeave={e => e.stopPropagation()}
                   aria-label={`Close ${f.name}`}
-                  tabIndex={-1}
                 >
                   <X size={10} />
                 </button>

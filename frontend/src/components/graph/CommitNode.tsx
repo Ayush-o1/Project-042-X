@@ -48,18 +48,14 @@ export const CommitNode = memo(({
         width: 300,
         color: 'var(--text-primary)',
         transition: 'transform var(--duration-fast) var(--ease-default), border-color var(--duration-fast), box-shadow var(--duration-fast), opacity 300ms ease',
-        transform: selected ? 'scale(1.03)' : 'scale(1)',
+        // isHovered is already tracked (it also gates the tooltip below), so
+        // the hover scale is derived here instead of mutating style directly.
+        transform: selected || (isHovered && !data.dimmed) ? 'scale(1.03)' : 'scale(1)',
         opacity: data.dimmed ? 0.12 : 1,
         zIndex: isHovered ? 100 : 1,
       }}
-      onMouseEnter={e => {
-        setIsHovered(true);
-        if (!selected && !data.dimmed) (e.currentTarget as HTMLElement).style.transform = 'scale(1.03)';
-      }}
-      onMouseLeave={e => {
-        setIsHovered(false);
-        if (!selected) (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
-      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       <Handle type="target" position={Position.Top} style={{ background: 'var(--accent)', border: 'none', width: 6, height: 6 }} />
 
@@ -90,10 +86,8 @@ export const CommitNode = memo(({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', overflow: 'hidden' }}>
           {/* Author avatar */}
-          <div style={{ width: 18, height: 18, borderRadius: '50%', background: authorColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <span style={{ fontSize: 9, fontWeight: 700, color: 'white' }}>
-              {(data.author || '?').charAt(0).toUpperCase()}
-            </span>
+          <div className="avatar avatar-sm" style={{ background: authorColor }}>
+            {(data.author || '?').charAt(0).toUpperCase()}
           </div>
           <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {data.author}
@@ -151,15 +145,7 @@ export const CommitNode = memo(({
                   key={i}
                   type="button"
                   onClick={e => { e.stopPropagation(); onOpenFile?.(file); }}
-                  style={{
-                    fontSize: 'var(--text-2xs)', color: 'var(--accent)', fontFamily: 'var(--font-mono)',
-                    padding: '1px 4px', borderRadius: 3, textAlign: 'left',
-                    background: 'transparent', cursor: 'pointer',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    transition: 'background var(--duration-fast)',
-                  }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--accent-subtle)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                  className="commit-file-link"
                   title={file}
                 >
                   {file.split('/').pop()}

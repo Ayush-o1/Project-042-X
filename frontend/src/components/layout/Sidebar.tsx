@@ -63,35 +63,10 @@ const FileTreeNode: React.FC<{ node: TreeNode }> = React.memo(({ node }) => {
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
       aria-selected={isSelected}
       aria-label={node.file ? `Open ${node.name}` : undefined}
+      className={`sidebar-file-item${isSelected ? ' selected' : ''}`}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-2)',
-        padding: '3px var(--space-4)',
         paddingLeft: `${node.depth * 14 + 8}px`,
         cursor: node.isDirectory && node.depth === 0 ? 'default' : 'pointer',
-        borderRadius: 'var(--radius-md)',
-        color: isSelected ? 'var(--accent-hover)' : 'var(--text-secondary)',
-        backgroundColor: isSelected ? 'var(--bg-selected)' : 'transparent',
-        fontSize: 'var(--text-xs)',
-        userSelect: 'none',
-        transition: 'background var(--duration-fast), color var(--duration-fast)',
-        minHeight: 26,
-        outline: 'none',
-        marginLeft: 'var(--space-2)',
-        marginRight: 'var(--space-2)',
-      }}
-      onMouseEnter={e => {
-        if (!isSelected) {
-          (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--bg-hover)';
-          (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)';
-        }
-      }}
-      onMouseLeave={e => {
-        if (!isSelected) {
-          (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-          (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)';
-        }
       }}
     >
       {/* Chevron or file icon */}
@@ -114,14 +89,12 @@ const FileTreeNode: React.FC<{ node: TreeNode }> = React.memo(({ node }) => {
           type="button"
           aria-label={isFav ? `Remove ${node.name} from favorites` : `Add ${node.name} to favorites`}
           onClick={e => { e.stopPropagation(); toggleFavorite(node.file!); }}
-          className="btn-icon btn-icon-sm"
+          className="btn-icon btn-icon-sm row-hide-action"
           style={{
-            opacity: isFav ? 1 : 0,
+            opacity: isFav ? 1 : undefined,
             color: isFav ? 'var(--color-warning)' : 'var(--text-tertiary)',
-            transition: 'opacity var(--duration-fast)',
             flexShrink: 0,
           }}
-          tabIndex={-1}
         >
           <Star size={10} fill={isFav ? 'var(--color-warning)' : 'none'} />
         </button>
@@ -140,13 +113,7 @@ const SectionLabel: React.FC<{ label: string; count?: number }> = ({ label, coun
       padding: 'var(--space-6) var(--space-6) var(--space-2)',
     }}
   >
-    <span style={{
-      fontSize: 'var(--text-2xs)',
-      fontWeight: 'var(--weight-semibold)',
-      textTransform: 'uppercase',
-      letterSpacing: '0.07em',
-      color: 'var(--text-tertiary)',
-    }}>
+    <span className="field-label">
       {label}
     </span>
     {count !== undefined && (
@@ -255,22 +222,11 @@ export const Sidebar: React.FC = () => {
                   tabIndex={0}
                   onKeyDown={e => { if (e.key === 'Enter') setActiveFile(f); }}
                   aria-label={`Switch to ${f.name}`}
+                  className={`sidebar-row flex-between${isActive ? ' active' : ''}`}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 'var(--space-3)',
-                    padding: '3px var(--space-3)',
-                    borderRadius: 'var(--radius-md)',
                     backgroundColor: isActive ? 'var(--bg-active)' : 'transparent',
                     color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontSize: 'var(--text-xs)',
-                    cursor: 'pointer',
-                    transition: 'background var(--duration-fast), color var(--duration-fast)',
-                    minHeight: 26,
                   }}
-                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'; }}
-                  onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', overflow: 'hidden', flex: 1 }}>
                     {getFileIcon(f.extension)}
@@ -280,16 +236,8 @@ export const Sidebar: React.FC = () => {
                     type="button"
                     aria-label={`Close ${f.name}`}
                     onClick={e => { e.stopPropagation(); closeFile(f.path); }}
-                    className="btn-icon btn-icon-sm"
-                    style={{ flexShrink: 0, color: 'var(--text-tertiary)', opacity: 0 }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLElement).style.opacity = '1';
-                      (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)';
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.opacity = '0';
-                    }}
-                    tabIndex={-1}
+                    className="btn-icon btn-icon-sm row-hide-action"
+                    style={{ flexShrink: 0, color: 'var(--text-tertiary)' }}
                   >
                     <X size={10} />
                   </button>
@@ -314,21 +262,12 @@ export const Sidebar: React.FC = () => {
                   role="button"
                   tabIndex={0}
                   onKeyDown={e => { if (e.key === 'Enter') setActiveFile(f); }}
+                  aria-label={`Switch to ${f.name}`}
+                  className={`sidebar-row${isActive ? ' active' : ''}`}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-2)',
-                    padding: '3px var(--space-3)',
-                    borderRadius: 'var(--radius-md)',
                     backgroundColor: isActive ? 'var(--bg-selected)' : 'transparent',
                     color: isActive ? 'var(--accent-hover)' : 'var(--text-secondary)',
-                    fontSize: 'var(--text-xs)',
-                    cursor: 'pointer',
-                    transition: 'background var(--duration-fast), color var(--duration-fast)',
-                    minHeight: 26,
                   }}
-                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'; }}
-                  onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
                   <Star size={10} color="var(--color-warning)" fill="var(--color-warning)" style={{ flexShrink: 0 }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>

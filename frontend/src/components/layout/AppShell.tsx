@@ -150,21 +150,7 @@ const EmptyHero: React.FC = () => {
         }}
       >
         {FEATURE_ITEMS.map(item => (
-          <div
-            key={item.title}
-            style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-xl)',
-              padding: 'var(--space-6)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-3)',
-              transition: 'border-color var(--duration-normal)',
-            }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-strong)'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)'}
-          >
+          <div key={item.title} className="feature-card">
             <span style={{ color: 'var(--accent)' }}>{item.icon}</span>
             <div>
               <div style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)', marginBottom: 2 }}>

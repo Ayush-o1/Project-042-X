@@ -104,16 +104,7 @@ export const CompareSnapshots: React.FC = () => {
         {/* Header */}
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-            <div
-              style={{
-                width: 28, height: 28,
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 'var(--radius-lg)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--text-tertiary)',
-              }}
-            >
+            <div className="icon-tile icon-tile-md">
               <GitCompare size={14} />
             </div>
             <h2 id="compare-title" className="modal-title">Compare Snapshots</h2>
@@ -230,19 +221,14 @@ export const CompareSnapshots: React.FC = () => {
               {diffRows.map((row, i) => (
                 <div
                   key={i}
+                  className="hover-row-surface"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '2fr 1fr 1fr 1fr',
                     gap: 'var(--space-4)',
                     padding: 'var(--space-4) var(--space-5)',
-                    background: 'var(--bg-surface)',
-                    borderRadius: 'var(--radius-lg)',
-                    border: '1px solid var(--border-subtle)',
-                    transition: 'background var(--duration-fast)',
                     alignItems: 'center',
                   }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'var(--bg-surface)'}
                 >
                   <span style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--text-primary)' }}>
                     {row.label}

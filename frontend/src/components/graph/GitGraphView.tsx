@@ -94,29 +94,24 @@ const GitToolbar = ({
           <Search size={13} style={{ position: 'absolute', left: 8, color: focused ? 'var(--accent)' : 'var(--text-tertiary)', transition: 'color var(--duration-fast)', pointerEvents: 'none' }} />
           <input type="text" placeholder="Search commits…" value={query} onChange={e => setQuery(e.target.value)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} aria-label="Search git commits" className="graph-search-input" />
         </form>
-        <div style={{ width: 1, height: 20, background: 'var(--border-default)' }} />
+        <div className="divider-v-sm" />
         {iconBtn(() => zoomIn({ duration: 800 }), <ZoomIn size={15} />, 'Zoom in')}
         {iconBtn(() => zoomOut({ duration: 800 }), <ZoomOut size={15} />, 'Zoom out')}
         {iconBtn(() => fitView({ duration: 800 }), <Maximize size={15} />, 'Fit view')}
-        <div style={{ width: 1, height: 20, background: 'var(--border-default)' }} />
+        <div className="divider-v-sm" />
         <div style={{ position: 'relative' }}>
           {iconBtn(() => setFilterOpen(v => !v), <Filter size={15} />, 'Filters', filterOpen || hasActiveFilters)}
           {hasActiveFilters && (
-            <div style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
+            <div className="status-dot" style={{ position: 'absolute', top: 4, right: 4, background: 'var(--accent)' }} />
           )}
         </div>
       </div>
 
       {/* Filter panel */}
       {filterOpen && (
-        <div style={{
-          background: 'var(--bg-panel)', border: '1px solid var(--border-default)',
-          borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-xl)',
-          padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)',
-          minWidth: 240, animation: 'slide-up var(--duration-fast) var(--ease-default)',
-        }}>
+        <div className="filter-panel" style={{ minWidth: 240 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-tertiary)' }}>Git Filters</span>
+            <span className="field-label">Git Filters</span>
             {hasActiveFilters && (
               <button type="button" onClick={() => { onAuthorChange(''); onDateFromChange(''); onDateToChange(''); }} style={{ fontSize: 'var(--text-2xs)', color: 'var(--accent)', background: 'transparent', cursor: 'pointer' }}>
                 Clear all
@@ -306,7 +301,7 @@ const FlowWrapper: React.FC = () => {
   if (!git) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 'var(--space-6)' }}>
-        <div style={{ width: 56, height: 56, background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-2xl)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="empty-state-icon" style={{ marginBottom: 0 }}>
           <GitBranch size={24} style={{ opacity: 0.3 }} />
         </div>
         <div style={{ textAlign: 'center' }}>

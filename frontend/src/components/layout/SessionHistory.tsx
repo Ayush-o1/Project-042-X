@@ -128,36 +128,13 @@ export const SessionHistory: React.FC = () => {
         {/* Header */}
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-            <div
-              style={{
-                width: 28, height: 28,
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 'var(--radius-lg)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--text-tertiary)',
-              }}
-            >
+            <div className="icon-tile icon-tile-md">
               <Clock size={14} />
             </div>
             <h2 id="sessions-title" className="modal-title">Analysis Sessions</h2>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--accent-hover)',
-                cursor: 'pointer',
-                padding: 'var(--space-2) var(--space-4)',
-                borderRadius: 'var(--radius-lg)',
-                transition: 'background var(--duration-fast)',
-              }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--accent-subtle)'}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
-            >
+            <label className="link-action">
               <Upload size={13} />
               Import
               <input
@@ -224,25 +201,7 @@ export const SessionHistory: React.FC = () => {
               return (
                 <div
                   key={s.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 'var(--space-4)',
-                    padding: 'var(--space-5) var(--space-6)',
-                    background: 'var(--bg-surface)',
-                    borderRadius: 'var(--radius-xl)',
-                    border: `1px solid ${isConfirmingDelete ? 'var(--color-danger-border)' : 'var(--border-default)'}`,
-                    transition: 'border-color var(--duration-fast), background var(--duration-fast)',
-                  }}
-                  onMouseEnter={e => {
-                    if (!isConfirmingDelete)
-                      (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)';
-                  }}
-                  onMouseLeave={e => {
-                    if (!isConfirmingDelete)
-                      (e.currentTarget as HTMLElement).style.background = 'var(--bg-surface)';
-                  }}
+                  className={`session-row${isConfirmingDelete ? ' confirming' : ''}`}
                 >
                   {/* Session info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
