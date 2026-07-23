@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Project 042-X is a local-first repository intelligence tool. It analyzes local Git repositories, builds an AST-derived dependency graph, parses the full commit history, and computes deterministic architecture metrics — circular dependencies, coupling, hotspots, and module health — entirely on your machine. No data ever leaves your computer.
+Understanding an unfamiliar codebase usually means manually tracing imports, guessing at coupling between modules, and cross-referencing `git log` and `git blame` by hand — or sending the source to a third-party SaaS tool to get that analysis done for you. Project 042-X does the analysis locally instead: point it at a repository and it parses every file's AST, builds the dependency graph, reads the full commit history, and computes deterministic architecture metrics — circular dependencies, coupling, hotspots, module health — without any of the code or history leaving your machine.
 
 Parsing uses SWC (Rust-based) for speed; graph layout is computed with Dagre and rendered interactively with React Flow.
 
@@ -10,7 +10,7 @@ Parsing uses SWC (Rust-based) for speed; graph layout is computed with Dagre and
 
 - **AST-Driven Architecture Graph**: Maps ES module imports/exports into an interactive dependency graph with folder clustering, filters, a per-node inspector, and one-click Collapse All / Expand All controls.
 - **Git Timeline**: Visualizes commit history and branch/merge topology, with author and date filtering, an opt-in day-grouping view for dense histories, and a jump-to-latest-commit action.
-- **Insights Dashboard**: Deterministic metrics — circular dependencies (Tarjan's SCC), orphaned source files, longest dependency chains, fan-in/fan-out, instability, and per-module health scores.
+- **Insights Dashboard**: Deterministic metrics — circular dependencies (Tarjan's SCC), orphaned source files, longest dependency chains, fan-in/fan-out, instability, and per-module health scores — organized into Overview, Architecture Signals, and Git Activity sections.
 - **Integrated Code Viewer**: Jump from any graph node straight to syntax-highlighted source, with a Related Files panel that lists the active file's imports and importers as clickable rows.
 - **Session Persistence**: Snapshot an analysis to the browser's IndexedDB and restore it instantly, plus JSON export/import and snapshot comparison.
 - **Export Engine**: PDF, Markdown, and JSON reports; PNG/SVG captures of the graph view.
@@ -26,29 +26,6 @@ Project 042-X runs as two local processes:
 The **Node.js backend** is a data-processing pipeline: it scans the filesystem (respecting `.gitignore`), parses TypeScript/JavaScript ASTs with `@swc/core`, and reads git history via `simple-git`. Everything is held in memory — there is no database. The API binds to `127.0.0.1` only and rejects non-local origins and hosts.
 
 The **React frontend** (Zustand for state) fetches the analysis in stages, computes derived metrics in its Insights Engine (Tarjan's SCC, memoized DFS), lays out graphs with `dagre`, and renders them with `@xyflow/react` (React Flow, SVG/DOM-based).
-
-## Screenshots
-
-### Landing Page
-![Landing Page](docs/images/landing.png)
-
-### Repository Analysis & Code Viewer
-![Code Viewer](docs/images/code-viewer.png)
-
-### Dependency Graph (Architecture View)
-![Dependency Graph](docs/images/dependency-graph.png)
-
-### Git Timeline
-![Git Timeline](docs/images/git-timeline.png)
-
-### Insights Dashboard
-![Insights Dashboard](docs/images/insights-dashboard.png)
-
-### Session History
-![Session History](docs/images/session-history.png)
-
-### Export System
-![Export System](docs/images/export-system.png)
 
 ## Installation
 
@@ -83,7 +60,7 @@ For a production-style build: `npm run build`, then `npm start --prefix backend`
 - **Sidebar**: Toggle the file explorer with the menu icon in the header — collapsed on wide viewports, it stays collapsed; below the tablet-landscape breakpoint the same button opens/closes it as a dismissible overlay instead.
 - **Persistence**: Press `Cmd+S` (or click **Save**) to snapshot the analysis into IndexedDB; restore it from **History**. Sidebar collapse state and the Architecture graph's filter toggles are remembered across reloads automatically.
 - **Exporting**: Use the **Export** menu. PNG/SVG capture the currently visible Architecture graph, so open that tab and frame the view first.
-- **Keyboard shortcuts**: `Cmd+K` Command Palette · `Cmd+S` Save session · `Cmd+Shift+E` Export PDF · `Esc` closes any open modal/overlay · `←`/`→` switch tabs when the tab bar is focused. Full reference in **Settings** (gear icon).
+- **Keyboard shortcuts**: `Cmd+K` jump to a file · `Cmd+S` save session · `Cmd+Shift+E` export PDF · `Esc` closes any open modal/overlay · `←`/`→` switch tabs when the tab bar is focused. Full reference in **Keyboard Shortcuts** (the keyboard icon in the header).
 
 ## Technology Stack
 
@@ -102,7 +79,7 @@ Project 042-X/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/    # React components (Graph, Insights, Layout, Viewer)
-│   │   ├── hooks/         # useMediaQuery, useFocusTrap, usePersistedState, useToast
+│   │   ├── hooks/         # useMediaQuery, useFocusTrap, useDelayedFocus, usePersistedState, useToast
 │   │   ├── lib/           # Insights, Export, Session, and fuzzy-match engines
 │   │   └── store/         # Zustand state management
 │   └── package.json
@@ -137,7 +114,7 @@ Backend tests (Vitest + Supertest) cover the AST parser, path resolution, filesy
 
 ## Accessibility
 
-- Every modal (Settings, Session History, Compare Snapshots, Command Palette) traps `Tab` navigation with a shared `useFocusTrap` hook and returns focus to the trigger element on close.
+- Every modal (Keyboard Shortcuts, Session History, Compare Snapshots, Command Palette) traps `Tab` navigation with a shared `useFocusTrap` hook and returns focus to the trigger element on close.
 - The main view switcher uses the ARIA tabs pattern (roving tabindex, arrow-key navigation); the file explorer uses `tree`/`treeitem` semantics and is fully keyboard-operable.
 - Toast notifications are announced via `aria-live`.
 - `prefers-reduced-motion: reduce` is respected globally.

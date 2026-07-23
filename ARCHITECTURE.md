@@ -70,6 +70,7 @@ Separates topological data from spatial data.
 - Forward/reverse adjacency indexes are built once per loaded graph; hover highlighting walks these indexes (O(V+E) per hover) instead of rescanning the edge list at every traversal step.
 - The Git Timeline caps rendered commits (most recent 500) independently of how many were analyzed, since dagre-laying-out and mounting tens of thousands of commit nodes is unusable regardless of correctness.
 - Both graphs support collapsing groups of nodes into a single summary node — folders in the Architecture graph (collapsed by default, with Collapse All / Expand All controls), commits by calendar day in the Git Timeline (opt-in). Both reuse the same technique: hidden member nodes redirect their edges to the summary node's id, parallel redirected edges are deduplicated with a count, and edges that become internal to one summary node are dropped.
+- Collapse state, the pinned/selected node, and day-grouping live in the Zustand store rather than component state, so they survive switching tabs and coming back — React Flow fully unmounts an inactive lazy-loaded tab, which previously reset all of this on every visit.
 
 ### 5. Export & Session Engine
 Provides zero-configuration persistence.
@@ -121,7 +122,7 @@ Project 042-X/
 │   │   │   ├── layout/           # AppShell, Sidebar (file explorer), Header, Modals
 │   │   │   ├── ui/               # Shared primitives (Toast)
 │   │   │   └── viewer/           # Code Viewer implementation
-│   │   ├── hooks/                # useMediaQuery, useFocusTrap, usePersistedState, useToast
+│   │   ├── hooks/                # useMediaQuery, useFocusTrap, useDelayedFocus, usePersistedState, useToast
 │   │   ├── lib/                  # Export, Session, Insight, and fuzzy-match algorithms
 │   │   ├── store/                # Zustand global state
 │   │   ├── types/                # Strict TypeScript interfaces
