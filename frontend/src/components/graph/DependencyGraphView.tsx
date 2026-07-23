@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -14,7 +14,7 @@ import '@xyflow/react/dist/style.css';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useMediaQuery, BREAKPOINTS } from '../../hooks/useMediaQuery';
-import { getDagreLayout } from './layoutUtils';
+import type { DagreLayoutRequest, DagreLayoutResponse } from './dagreLayout.worker';
 import { FileNode } from './FileNode';
 import { FolderNode } from './FolderNode';
 import { CustomEdge } from './CustomEdge';
@@ -24,7 +24,7 @@ import {
   Search, ZoomIn, ZoomOut, Maximize, X, ExternalLink, FileCode,
   Network, AlertTriangle, Users, Clock, Filter,
   ChevronDown, GitCommit, ArrowUpRight, ArrowDownRight, Flame,
-  ShieldAlert, EyeOff, CircleDot, Hash
+  ShieldAlert, EyeOff, CircleDot, Hash, Loader2
 } from 'lucide-react';
 
 const nodeTypes = {
@@ -652,11 +652,49 @@ const FlowWrapper: React.FC<{
   }, [dependencies]);
 
   // ── Raw layout (recomputed only when dependencies change) ─────────────────
-  const [rawNodes, rawEdges] = useMemo(() => {
-    if (!dependencies) return [[], []];
-    const { nodes: ln, edges: le } = getDagreLayout(dependencies, 'LR');
-    return [ln, le];
+  // Dagre's layout pass runs in a Web Worker instead of blocking the main
+  // thread — on repos with a few thousand files this was a noticeable
+  // freeze (see README's Performance Notes). The requestId guards against a
+  // slower, now-stale response from a previous dataset overwriting a newer
+  // one if `dependencies` changes again before the worker replies.
+  const [rawNodes, setRawNodes] = useState<Node[]>([]);
+  const [rawEdges, setRawEdges] = useState<Edge[]>([]);
+  const [isLayouting, setIsLayouting] = useState(false);
+  const layoutWorkerRef = useRef<Worker | null>(null);
+  const layoutRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (!dependencies) {
+      setRawNodes([]);
+      setRawEdges([]);
+      return;
+    }
+
+    if (!layoutWorkerRef.current) {
+      layoutWorkerRef.current = new Worker(
+        new URL('./dagreLayout.worker.ts', import.meta.url),
+        { type: 'module' },
+      );
+    }
+    const worker = layoutWorkerRef.current;
+    const requestId = ++layoutRequestIdRef.current;
+    setIsLayouting(true);
+
+    const handleMessage = (e: MessageEvent<DagreLayoutResponse>) => {
+      if (e.data.requestId !== layoutRequestIdRef.current) return;
+      setRawNodes(e.data.nodes);
+      setRawEdges(e.data.edges);
+      setIsLayouting(false);
+    };
+    worker.addEventListener('message', handleMessage);
+    worker.postMessage({ requestId, data: dependencies, direction: 'LR' } satisfies DagreLayoutRequest);
+
+    return () => worker.removeEventListener('message', handleMessage);
   }, [dependencies]);
+
+  // Terminate the worker only when the view itself unmounts, not on every
+  // dependency change — it's reused across layout requests.
+  useEffect(() => () => layoutWorkerRef.current?.terminate(), []);
 
   // ── Apply insight overlays + filters ─────────────────────────────────────
   useEffect(() => {
@@ -818,6 +856,17 @@ const FlowWrapper: React.FC<{
           <p style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>No Dependency Graph</p>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>Analyze a repository to build its AST graph.</p>
         </div>
+      </div>
+    );
+  }
+
+  // The worker's layout pass hasn't resolved yet for this dataset — shown
+  // instead of an empty canvas, since large graphs can take a moment.
+  if (isLayouting && nodes.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 'var(--space-4)' }}>
+        <Loader2 size={22} className="animate-spin" style={{ color: 'var(--accent)' }} />
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>Laying out graph…</span>
       </div>
     );
   }
