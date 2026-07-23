@@ -1,6 +1,6 @@
 {
   "name": "project-042x-backend",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Analysis backend for Project 042-X: filesystem scanning, SWC-based dependency extraction, and git history parsing for local repositories.",
   "main": "dist/server.js",
   "scripts": {

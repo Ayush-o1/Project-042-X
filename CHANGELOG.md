@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-23
+
+### Added
+- **Git Timeline day grouping**: an opt-in toolbar toggle collapses commit history into one summary node per calendar day (author avatars, commit count, branch-lane color), with click-to-expand back to individual commits. Off by default — the individual-commit view already reads fine for small and medium histories, and this only reduces density when a user asks for it. Redirects and deduplicates edges into the collapsed day using the same technique as the Architecture graph's folder collapse.
+- **Jump to latest commit**: a Git Timeline toolbar action that centers and highlights the most recent commit (or its day-group summary, if grouping is on).
+- **Collapse All / Expand All** toolbar controls for the Architecture graph, replacing folder-by-folder clicking when a user wants to bulk-expand or re-collapse the whole tree.
+- **Related Files panel** in the Code Viewer: a toggleable side panel listing every file that imports, and is imported by, the active file, each a clickable row that opens the file in place.
+
+### Changed
+- Graph nodes now animate to their new position when a re-layout occurs (folder collapse, day-group toggle, filter changes) instead of snapping instantly; disabled while a node is being dragged so manual dragging stays 1:1 with the pointer.
+
 ## [1.4.0] - 2026-07-23
 
 ### Performance

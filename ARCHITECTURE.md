@@ -69,6 +69,7 @@ Separates topological data from spatial data.
 - Coordinates are passed to `@xyflow/react` (React Flow), which renders nodes as DOM elements and edges as SVG, and handles zooming, panning, and viewport virtualization.
 - Forward/reverse adjacency indexes are built once per loaded graph; hover highlighting walks these indexes (O(V+E) per hover) instead of rescanning the edge list at every traversal step.
 - The Git Timeline caps rendered commits (most recent 500) independently of how many were analyzed, since dagre-laying-out and mounting tens of thousands of commit nodes is unusable regardless of correctness.
+- Both graphs support collapsing groups of nodes into a single summary node — folders in the Architecture graph (collapsed by default, with Collapse All / Expand All controls), commits by calendar day in the Git Timeline (opt-in). Both reuse the same technique: hidden member nodes redirect their edges to the summary node's id, parallel redirected edges are deduplicated with a count, and edges that become internal to one summary node are dropped.
 
 ### 5. Export & Session Engine
 Provides zero-configuration persistence.
@@ -100,11 +101,14 @@ Project 042-X/
 │   │   ├── api/
 │   │   │   ├── controllers/      # Route handlers
 │   │   │   ├── dtos/             # Data Transfer Objects & Zod Schemas
-│   │   │   ├── middlewares/      # Error boundaries and validation
-│   │   │   └── routes/           # Express router definitions
+│   │   │   ├── middlewares/      # Error boundaries, host guard, and validation
+│   │   │   ├── routes/           # Express router definitions
+│   │   │   ├── services/         # RepositoryService — the in-memory analysis registry
+│   │   │   └── types/            # Backend-internal TypeScript interfaces
 │   │   ├── core/
 │   │   │   ├── ast/              # SWC parsing and path resolution
 │   │   │   ├── engine/           # Intelligence orchestration
+│   │   │   ├── errors/           # Typed domain errors
 │   │   │   ├── git/              # simple-git wrapper
 │   │   │   └── scanner/          # Filesystem traversal
 │   │   └── server.ts             # Application entry point
@@ -114,7 +118,8 @@ Project 042-X/
 │   │   ├── components/
 │   │   │   ├── graph/            # React Flow and Dagre implementations
 │   │   │   ├── insights/         # Dashboard and metric KPI components
-│   │   │   ├── layout/           # AppShell, Sidebar, Header, Modals
+│   │   │   ├── layout/           # AppShell, Sidebar (file explorer), Header, Modals
+│   │   │   ├── ui/               # Shared primitives (Toast)
 │   │   │   └── viewer/           # Code Viewer implementation
 │   │   ├── hooks/                # useMediaQuery, useFocusTrap, usePersistedState, useToast
 │   │   ├── lib/                  # Export, Session, Insight, and fuzzy-match algorithms
