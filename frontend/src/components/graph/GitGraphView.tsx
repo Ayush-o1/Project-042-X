@@ -323,7 +323,8 @@ const FlowWrapper: React.FC = () => {
       {(hasFilters || isCapped) && (
         <div style={{
           position: 'absolute', top: 'var(--space-5)', left: 'var(--space-5)',
-          zIndex: 10, display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+          maxWidth: 'calc(100vw - var(--space-10))',
+          zIndex: 10, display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap',
           padding: 'var(--space-2) var(--space-4)',
           background: 'var(--bg-panel)', border: '1px solid var(--border-focus)',
           borderRadius: 'var(--radius-full)', boxShadow: 'var(--shadow-md)',

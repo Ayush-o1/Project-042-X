@@ -348,7 +348,7 @@ export const InsightsDashboard: React.FC = () => {
       }}
     >
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
         <div>
           <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 'var(--weight-bold)', color: 'var(--text-primary)', letterSpacing: '-0.02em', marginBottom: 'var(--space-1)' }}>
             Repository Insights
@@ -366,7 +366,7 @@ export const InsightsDashboard: React.FC = () => {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-5)' }}>
+      <div className="dashboard-kpi-grid">
         <KpiCard
           label="Circular Dependencies"
           value={insights.circularDependencies.length}
@@ -406,7 +406,7 @@ export const InsightsDashboard: React.FC = () => {
       </div>
 
       {/* ── Second row of KPIs ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-5)' }}>
+      <div className="dashboard-kpi-grid">
         <KpiCard
           label="Avg Fan-In"
           value={insights.averageFanIn.toFixed(2)}
@@ -490,7 +490,7 @@ export const InsightsDashboard: React.FC = () => {
           description="Per-directory health rollup (avg instability, avg health)"
           badge={<span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>by avg health</span>}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+          <div className="dashboard-grid-2" style={{ gap: 'var(--space-3)' }}>
             {insights.packageMetrics.slice(0, 8).map((p, i) => (
               <PackageRow key={i} p={p} />
             ))}
@@ -499,7 +499,7 @@ export const InsightsDashboard: React.FC = () => {
       )}
 
       {/* ── 2-column grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-6)' }}>
+      <div className="dashboard-grid-2" style={{ gap: 'var(--space-6)' }}>
 
         {/* Circular Dependencies */}
         <Panel
@@ -702,7 +702,7 @@ export const InsightsDashboard: React.FC = () => {
           iconColor="var(--accent)"
           badge={<span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>total degree (in + out) · click to navigate</span>}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
+          <div className="dashboard-grid-2" style={{ gap: 'var(--space-3)' }}>
             {insights.mostConnectedFiles.slice(0, 8).map((f, i) => (
               <BarItem
                 key={i}
@@ -727,39 +727,41 @@ export const InsightsDashboard: React.FC = () => {
           description="Robert Martin's I = Ce/(Ca+Ce). Click to view in graph."
           badge={<span className="badge badge-danger">Most Unstable</span>}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 48px 48px 48px 64px', gap: 0 }}>
-            {/* Header */}
-            {['Module', 'In', 'Out', 'I', 'Health'].map(h => (
-              <div key={h} style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: 'var(--space-2) var(--space-3)', borderBottom: '1px solid var(--border-subtle)' }}>{h}</div>
-            ))}
-            {insights.mostUnstableModules.slice(0, 10).map((m) => {
-              const hc = m.healthScore >= 70 ? 'var(--color-success)' : m.healthScore >= 40 ? 'var(--color-warning)' : 'var(--color-danger)';
-              return (
-                <React.Fragment key={m.id}>
-                  <button
-                    type="button"
-                    onClick={() => navigateToGraphNode(m.id)}
-                    style={{
-                      fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--accent)',
-                      padding: 'var(--space-2) var(--space-3)', textAlign: 'left', cursor: 'pointer',
-                      background: 'transparent', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      borderBottom: '1px solid var(--border-subtle)',
-                    }}
-                    title={m.id}
-                  >
-                    {m.id.split('/').pop()}
-                  </button>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', padding: 'var(--space-2) var(--space-3)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', borderBottom: '1px solid var(--border-subtle)' }}>{m.fanIn}</div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', padding: 'var(--space-2) var(--space-3)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', borderBottom: '1px solid var(--border-subtle)' }}>{m.fanOut}</div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: m.instability > 0.7 ? 'var(--color-danger)' : m.instability > 0.4 ? 'var(--color-warning)' : 'var(--color-success)', padding: 'var(--space-2) var(--space-3)', fontVariantNumeric: 'tabular-nums', fontWeight: 'var(--weight-semibold)', textAlign: 'right', borderBottom: '1px solid var(--border-subtle)' }}>
-                    {m.instability.toFixed(2)}
-                  </div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: hc, padding: 'var(--space-2) var(--space-3)', fontVariantNumeric: 'tabular-nums', fontWeight: 'var(--weight-bold)', textAlign: 'right', borderBottom: '1px solid var(--border-subtle)' }}>
-                    {m.healthScore}
-                  </div>
-                </React.Fragment>
-              );
-            })}
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px,1fr) 48px 48px 48px 64px', gap: 0 }}>
+              {/* Header */}
+              {['Module', 'In', 'Out', 'I', 'Health'].map(h => (
+                <div key={h} style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', fontWeight: 'var(--weight-semibold)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: 'var(--space-2) var(--space-3)', borderBottom: '1px solid var(--border-subtle)' }}>{h}</div>
+              ))}
+              {insights.mostUnstableModules.slice(0, 10).map((m) => {
+                const hc = m.healthScore >= 70 ? 'var(--color-success)' : m.healthScore >= 40 ? 'var(--color-warning)' : 'var(--color-danger)';
+                return (
+                  <React.Fragment key={m.id}>
+                    <button
+                      type="button"
+                      onClick={() => navigateToGraphNode(m.id)}
+                      style={{
+                        fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--accent)',
+                        padding: 'var(--space-2) var(--space-3)', textAlign: 'left', cursor: 'pointer',
+                        background: 'transparent', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        borderBottom: '1px solid var(--border-subtle)',
+                      }}
+                      title={m.id}
+                    >
+                      {m.id.split('/').pop()}
+                    </button>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', padding: 'var(--space-2) var(--space-3)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', borderBottom: '1px solid var(--border-subtle)' }}>{m.fanIn}</div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', padding: 'var(--space-2) var(--space-3)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', borderBottom: '1px solid var(--border-subtle)' }}>{m.fanOut}</div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: m.instability > 0.7 ? 'var(--color-danger)' : m.instability > 0.4 ? 'var(--color-warning)' : 'var(--color-success)', padding: 'var(--space-2) var(--space-3)', fontVariantNumeric: 'tabular-nums', fontWeight: 'var(--weight-semibold)', textAlign: 'right', borderBottom: '1px solid var(--border-subtle)' }}>
+                      {m.instability.toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: hc, padding: 'var(--space-2) var(--space-3)', fontVariantNumeric: 'tabular-nums', fontWeight: 'var(--weight-bold)', textAlign: 'right', borderBottom: '1px solid var(--border-subtle)' }}>
+                      {m.healthScore}
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </div>
         </Panel>
       )}

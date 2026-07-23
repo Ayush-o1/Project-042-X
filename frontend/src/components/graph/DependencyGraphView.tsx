@@ -13,6 +13,7 @@ import type { Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
+import { useMediaQuery, BREAKPOINTS } from '../../hooks/useMediaQuery';
 import { getDagreLayout } from './layoutUtils';
 import { FileNode } from './FileNode';
 import { FolderNode } from './FolderNode';
@@ -53,12 +54,16 @@ const CustomToolbar = ({
   filters,
   onFiltersChange,
   fileTypes,
+  shiftLeftFor,
 }: {
   nodes: Node[];
   onSearch: (id: string) => void;
   filters: GraphFilters;
   onFiltersChange: (f: GraphFilters) => void;
   fileTypes: string[];
+  /** Extra right margin (CSS length) so the toolbar/filter/legend column
+   *  doesn't sit underneath the Node Inspector when both are open at once. */
+  shiftLeftFor?: string;
 }) => {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const [query, setQuery] = useState('');
@@ -87,7 +92,17 @@ const CustomToolbar = ({
   );
 
   return (
-    <Panel position="top-right" style={{ margin: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+    <Panel
+      position="top-right"
+      style={{
+        margin: 'var(--space-5)',
+        marginRight: shiftLeftFor ? `calc(var(--space-5) + ${shiftLeftFor})` : 'var(--space-5)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-3)',
+        transition: 'margin-right var(--duration-normal) var(--ease-default)',
+      }}
+    >
       {/* Main toolbar */}
       <div className="graph-toolbar">
         <form onSubmit={handleSearch} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -327,12 +342,12 @@ const Inspector = ({
 
   return (
     <div
+      className="graph-inspector"
       style={{
         position: 'absolute',
         right: 'var(--space-5)',
         top: 'var(--space-5)',
         bottom: 'var(--space-5)',
-        width: 320,
         background: 'var(--bg-panel)',
         border: '1px solid var(--border-focus)',
         borderRadius: 'var(--radius-2xl)',
@@ -540,6 +555,11 @@ const FlowWrapper: React.FC<{
       })),
     );
   const { setCenter } = useReactFlow();
+
+  // Below the tablet-landscape breakpoint there isn't room to dock the Node
+  // Inspector beside the toolbar, so it becomes a full-height overlay drawer
+  // instead (see the .graph-inspector-backdrop below).
+  const isCompact = useMediaQuery(`(max-width: ${BREAKPOINTS.tabletLandscape - 1}px)`);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -829,6 +849,7 @@ const FlowWrapper: React.FC<{
           filters={filters}
           onFiltersChange={setFilters}
           fileTypes={fileTypes}
+          shiftLeftFor={!isCompact && selectedNode ? 'calc(320px + var(--space-4))' : undefined}
         />
         <MiniMap
           nodeColor={(n) => {
@@ -848,16 +869,25 @@ const FlowWrapper: React.FC<{
       </ReactFlow>
 
       {selectedNode && (
-        <Inspector
-          node={selectedNode}
-          onClose={() => setSelectedNode(null)}
-          onOpen={handleOpenFile}
-          moduleMetrics={insights?.moduleMetrics || new Map()}
-          adjacency={adjacency}
-          gitCommitMap={gitCommitMap}
-          gitAuthorsMap={gitAuthorsMap}
-          gitLastModifiedMap={gitLastModifiedMap}
-        />
+        <>
+          {isCompact && (
+            <div
+              className="graph-inspector-backdrop"
+              onClick={() => setSelectedNode(null)}
+              aria-hidden="true"
+            />
+          )}
+          <Inspector
+            node={selectedNode}
+            onClose={() => setSelectedNode(null)}
+            onOpen={handleOpenFile}
+            moduleMetrics={insights?.moduleMetrics || new Map()}
+            adjacency={adjacency}
+            gitCommitMap={gitCommitMap}
+            gitAuthorsMap={gitAuthorsMap}
+            gitLastModifiedMap={gitLastModifiedMap}
+          />
+        </>
       )}
     </>
   );

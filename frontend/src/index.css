@@ -1514,6 +1514,25 @@ code, pre, kbd {
   flex-direction: column;
   gap: var(--space-4);
   animation: slide-up var(--duration-fast) var(--ease-default);
+  /* Guards its own minWidth (220-240px inline) from overflowing a very
+     narrow viewport — the panel floats over the graph, so it can shrink
+     independently of the canvas underneath it. */
+  max-width: calc(100vw - var(--space-10));
+}
+
+/* Dependency graph's Node Inspector. Fixed 320px on desktop; below the
+   tablet-landscape breakpoint it becomes a full-height drawer (capped to
+   the viewport width) with a dismissible backdrop, matching the sidebar's
+   overlay pattern, since there isn't room to dock it beside the toolbar. */
+.graph-inspector {
+  width: min(320px, calc(100vw - var(--space-10)));
+}
+.graph-inspector-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9;
+  animation: fade-in var(--duration-fast) var(--ease-default);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -1547,7 +1566,41 @@ code, pre, kbd {
 }
 
 /* ────────────────────────────────────────────────────────────
-   24P. HEADER RESPONSIVE (sidebar toggle, action-bar collapsing)
+   24P. DASHBOARD RESPONSIVE GRIDS (Insights Dashboard)
+   ──────────────────────────────────────────────────────────── */
+/* KPI card row: 4 columns on desktop, 2 on small-laptop/tablet, 1 on mobile. */
+.dashboard-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-5);
+}
+@media (max-width: 1279px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 479px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Shared 2-up grid (Package Health, the cycles/orphans/hotspots block,
+   Most Connected Files) — collapses to a single column once the sidebar
+   itself becomes an overlay, since that's the point content width gets
+   tight enough that two side-by-side lists start to feel cramped. */
+.dashboard-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 1023px) {
+  .dashboard-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+   24Q. HEADER RESPONSIVE (sidebar toggle, action-bar collapsing)
    ──────────────────────────────────────────────────────────── */
 /* Below small-laptop (1280px) the right-hand action buttons keep their
    icons (title="" still exposes the label as a tooltip) but drop their text
