@@ -129,6 +129,7 @@ const GitToolbar = ({
                 <select
                   value={selectedAuthor}
                   onChange={e => onAuthorChange(e.target.value)}
+                  aria-label="Filter by author"
                   style={{
                     width: '100%', padding: 'var(--space-2) var(--space-3)',
                     background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
@@ -164,6 +165,7 @@ const GitToolbar = ({
                   type="date"
                   value={dateFrom}
                   onChange={e => onDateFromChange(e.target.value)}
+                  aria-label="From date"
                   style={{ flex: 1, padding: '3px 8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: 'var(--text-xs)', cursor: 'pointer' }}
                 />
               </div>
@@ -173,6 +175,7 @@ const GitToolbar = ({
                   type="date"
                   value={dateTo}
                   onChange={e => onDateToChange(e.target.value)}
+                  aria-label="To date"
                   style={{ flex: 1, padding: '3px 8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', fontSize: 'var(--text-xs)', cursor: 'pointer' }}
                 />
               </div>

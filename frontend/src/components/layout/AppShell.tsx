@@ -288,16 +288,35 @@ export const AppShell: React.FC = () => {
               flexShrink: 0,
             }}
           >
-            <div className="tab-bar">
+            <div
+              className="tab-bar"
+              role="tablist"
+              aria-label="Views"
+              onKeyDown={e => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                if (!metadata && !isAnalyzing) return;
+                const currentIndex = TABS.findIndex(t => t.id === activeTab);
+                const delta = e.key === 'ArrowRight' ? 1 : -1;
+                const nextIndex = (currentIndex + delta + TABS.length) % TABS.length;
+                const nextTab = TABS[nextIndex];
+                e.preventDefault();
+                setActiveTab(nextTab.id);
+                (e.currentTarget.querySelector(`#tab-trigger-${nextTab.id}`) as HTMLElement | null)?.focus();
+              }}
+            >
               {TABS.map(tab => (
                 <button
                   key={tab.id}
+                  id={`tab-trigger-${tab.id}`}
                   type="button"
+                  role="tab"
                   onClick={() => setActiveTab(tab.id)}
                   className={`tab-btn${activeTab === tab.id ? ' tab-btn-active' : ''}`}
                   title={tab.description}
                   aria-label={tab.label}
                   aria-selected={activeTab === tab.id}
+                  aria-controls="view-panel"
+                  tabIndex={activeTab === tab.id ? 0 : -1}
                   disabled={!metadata && !isAnalyzing}
                 >
                   {tab.icon}
@@ -308,7 +327,13 @@ export const AppShell: React.FC = () => {
           </div>
 
           {/* ── Content Area ── */}
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <div
+            id="view-panel"
+            role="tabpanel"
+            aria-labelledby={`tab-trigger-${activeTab}`}
+            tabIndex={0}
+            style={{ flex: 1, position: 'relative', overflow: 'hidden', outline: 'none' }}
+          >
 
             {/* Empty state — no repo loaded */}
             {!metadata && !isAnalyzing && !error && <EmptyHero />}

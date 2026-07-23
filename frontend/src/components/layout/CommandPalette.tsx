@@ -5,6 +5,7 @@ import {
   Search, FileCode2, FileJson, Image as ImageIcon,
   File, FileText, Command
 } from 'lucide-react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 const getFileIcon = (ext?: string): React.ReactNode => {
   if (['.ts', '.tsx'].includes(ext || '')) return <FileCode2 size={14} color="var(--lang-ts)" />;
@@ -43,6 +44,7 @@ export const CommandPalette: React.FC = () => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   const filteredFiles = files
     .filter(f => !f.isDirectory && f.path.toLowerCase().includes(query.toLowerCase()))
@@ -79,6 +81,8 @@ export const CommandPalette: React.FC = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [commandPaletteOpen, filteredFiles, selectedIndex, setActiveFile, setCommandPaletteOpen]);
 
+  useFocusTrap(sheetRef, commandPaletteOpen);
+
   if (!commandPaletteOpen) return null;
 
   const dirOf = (path: string) => {
@@ -97,6 +101,7 @@ export const CommandPalette: React.FC = () => {
       aria-label="File search"
     >
       <div
+        ref={sheetRef}
         className="modal-sheet animate-slide-up"
         style={{ width: 580 }}
         onClick={e => e.stopPropagation()}
@@ -122,6 +127,7 @@ export const CommandPalette: React.FC = () => {
             aria-expanded="true"
             aria-autocomplete="list"
             aria-controls="palette-results"
+            aria-activedescendant={filteredFiles[selectedIndex] ? `palette-option-${selectedIndex}` : undefined}
             style={{
               flex: 1,
               fontSize: 'var(--text-base)',
@@ -181,6 +187,7 @@ export const CommandPalette: React.FC = () => {
               return (
                 <div
                   key={f.path}
+                  id={`palette-option-${i}`}
                   role="option"
                   aria-selected={isSelected}
                   onClick={() => { setActiveFile(f); setCommandPaletteOpen(false); }}

@@ -86,11 +86,14 @@ const ToastContainer: React.FC<{
   if (toasts.length === 0) return null;
 
   return (
-    <div className="toast-container">
+    <div className="toast-container" role="region" aria-label="Notifications">
       {toasts.map(t => (
         <div
           key={t.id}
           className={`toast toast-${t.type}${t.leaving ? ' toast-leaving' : ''}`}
+          role={t.type === 'error' ? 'alert' : 'status'}
+          aria-live={t.type === 'error' ? 'assertive' : 'polite'}
+          aria-atomic="true"
         >
           <span className="toast-icon flex-shrink-0">{TOAST_ICONS[t.type]}</span>
           <div className="toast-content">

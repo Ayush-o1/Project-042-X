@@ -1878,3 +1878,18 @@ code, pre, kbd {
 .hljs-tag         { color: #7ee787; }
 .hljs-tag .hljs-attr     { color: #79c0ff; }
 .hljs-tag .hljs-string   { color: #a5d6ff; }
+
+/* ────────────────────────────────────────────────────────────
+   29. REDUCED MOTION
+   ──────────────────────────────────────────────────────────── */
+/* Users who've asked the OS for reduced motion get near-instant state
+   changes instead of the app's slide/fade/scale animations — every rule
+   here is a blanket override, so no per-component opt-in is needed. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

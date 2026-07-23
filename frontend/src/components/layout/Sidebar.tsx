@@ -56,14 +56,21 @@ const FileTreeNode: React.FC<{ node: TreeNode; closeOverlayOnSelect?: () => void
     }
   };
 
+  // The synthetic repo-root row (depth 0) is always expanded and not itself
+  // interactive — only real folders (depth > 0) and files respond to
+  // clicks/keyboard, so only those get a tab stop.
+  const isInteractive = Boolean(node.file) || node.depth > 0;
+
   return (
     <div
-      role={node.file ? 'button' : undefined}
-      tabIndex={node.file ? 0 : undefined}
+      role="treeitem"
+      aria-level={node.depth + 1}
+      aria-expanded={node.isDirectory ? (isOpen || node.depth === 0) : undefined}
+      tabIndex={isInteractive ? 0 : -1}
       onClick={handleClick}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}
       aria-selected={isSelected}
-      aria-label={node.file ? `Open ${node.name}` : undefined}
+      aria-label={node.file ? `Open ${node.name}` : node.isDirectory && node.depth > 0 ? `${node.name} folder, ${isOpen ? 'expanded' : 'collapsed'}` : undefined}
       className={`sidebar-file-item${isSelected ? ' selected' : ''}`}
       style={{
         paddingLeft: `${node.depth * 14 + 8}px`,
@@ -301,13 +308,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOverlay, isOpen, onRequestCl
 
         <div style={{ flex: 1 }}>
           {flatVisibleFiles.length > 0 ? (
-            <Virtuoso
-              style={{ height: '100%' }}
-              data={flatVisibleFiles}
-              itemContent={(_, node) => (
-                <FileTreeNode node={node} closeOverlayOnSelect={isOverlay ? onRequestClose : undefined} />
-              )}
-            />
+            <div role="tree" aria-label="Files" style={{ height: '100%' }}>
+              <Virtuoso
+                style={{ height: '100%' }}
+                data={flatVisibleFiles}
+                itemContent={(_, node) => (
+                  <FileTreeNode node={node} closeOverlayOnSelect={isOverlay ? onRequestClose : undefined} />
+                )}
+              />
+            </div>
           ) : (
             <div
               style={{

@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
 import { listSessions, loadSession } from '../../lib/sessionEngine';
 import type { AnalysisSession } from '../../lib/sessionEngine';
 import { X, ArrowRight, GitCompare, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 type SessionSummary = { id: string; name: string; timestamp: string; path: string };
 
@@ -46,10 +47,13 @@ export const CompareSnapshots: React.FC = () => {
   const [sessionB, setSessionB] = useState<AnalysisSession | null>(null);
   const [loadingA, setLoadingA] = useState(false);
   const [loadingB, setLoadingB] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isCompareModalOpen) {
       listSessions().then(list => setSessions(list as SessionSummary[]));
+      setTimeout(() => closeRef.current?.focus(), 50);
     } else {
       setSessionA(null);
       setSessionB(null);
@@ -62,6 +66,8 @@ export const CompareSnapshots: React.FC = () => {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isCompareModalOpen, setCompareModalOpen]);
+
+  useFocusTrap(sheetRef, isCompareModalOpen);
 
   const handleSelectA = async (id: string) => {
     if (!id) return setSessionA(null);
@@ -99,7 +105,7 @@ export const CompareSnapshots: React.FC = () => {
       aria-modal="true"
       aria-labelledby="compare-title"
     >
-      <div className="modal-sheet" style={{ width: 720, maxHeight: '85vh' }}>
+      <div ref={sheetRef} className="modal-sheet" style={{ width: 720, maxHeight: '85vh' }}>
 
         {/* Header */}
         <div className="modal-header">
@@ -110,6 +116,7 @@ export const CompareSnapshots: React.FC = () => {
             <h2 id="compare-title" className="modal-title">Compare Snapshots</h2>
           </div>
           <button
+            ref={closeRef}
             type="button"
             onClick={() => setCompareModalOpen(false)}
             className="btn-icon btn-icon-md"

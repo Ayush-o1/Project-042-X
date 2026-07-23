@@ -11,6 +11,7 @@ import {
   X, Loader2, Clock, Archive
 } from 'lucide-react';
 import { useToast } from '../ui/Toast';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 type SessionSummary = Omit<AnalysisSession, 'files' | 'dependencies' | 'git' | 'insights'>;
 
@@ -26,10 +27,18 @@ export const SessionHistory: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
   useEffect(() => {
     if (isSessionHistoryOpen) refreshSessions();
+  }, [isSessionHistoryOpen]);
+
+  useEffect(() => {
+    if (isSessionHistoryOpen) {
+      setTimeout(() => closeRef.current?.focus(), 50);
+    }
   }, [isSessionHistoryOpen]);
 
   useEffect(() => {
@@ -40,6 +49,8 @@ export const SessionHistory: React.FC = () => {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isSessionHistoryOpen, setSessionHistoryOpen]);
+
+  useFocusTrap(sheetRef, isSessionHistoryOpen);
 
   const refreshSessions = async () => {
     const list = await listSessions();
@@ -123,7 +134,7 @@ export const SessionHistory: React.FC = () => {
       aria-modal="true"
       aria-labelledby="sessions-title"
     >
-      <div className="modal-sheet" style={{ width: 580, maxHeight: '80vh' }}>
+      <div ref={sheetRef} className="modal-sheet" style={{ width: 580, maxHeight: '80vh' }}>
 
         {/* Header */}
         <div className="modal-header">
@@ -147,6 +158,7 @@ export const SessionHistory: React.FC = () => {
               />
             </label>
             <button
+              ref={closeRef}
               type="button"
               onClick={() => setSessionHistoryOpen(false)}
               className="btn-icon btn-icon-md"

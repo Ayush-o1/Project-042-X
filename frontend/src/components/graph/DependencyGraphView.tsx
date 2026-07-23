@@ -186,6 +186,7 @@ const CustomToolbar = ({
                 <select
                   value={filters.fileTypeFilter}
                   onChange={e => onFiltersChange({ ...filters, fileTypeFilter: e.target.value })}
+                  aria-label="Filter by file type"
                   style={{
                     width: '100%',
                     padding: 'var(--space-2) var(--space-3)',

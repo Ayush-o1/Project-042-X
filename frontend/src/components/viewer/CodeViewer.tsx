@@ -5,7 +5,7 @@ import hljs from 'highlight.js';
 import {
   FileCode, Copy, Check, ChevronRight,
   FileText, FileJson, Image as ImageIcon,
-  File, X, AlertCircle
+  File, X, AlertCircle, RefreshCw
 } from 'lucide-react';
 
 /* ── Language detection from extension ─────────────────────── */
@@ -324,6 +324,15 @@ export const CodeViewer: React.FC = () => {
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', maxWidth: 420, lineHeight: 'var(--leading-relaxed)' }}>
               {fileError}
             </p>
+            <button
+              type="button"
+              onClick={() => setActiveFile(activeFile)}
+              className="btn btn-secondary btn-sm"
+              style={{ marginTop: 'var(--space-2)' }}
+            >
+              <RefreshCw size={12} />
+              Retry
+            </button>
           </div>
         ) : activeFileContent ? (
           <div style={{ flex: 1, overflow: 'auto' }}>

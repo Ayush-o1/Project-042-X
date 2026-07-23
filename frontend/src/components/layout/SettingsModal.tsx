@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
 import { X, Keyboard } from 'lucide-react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 const SHORTCUTS = [
   { label: 'Command Palette',  keys: ['⌘', 'K'] },
@@ -14,6 +15,7 @@ export const SettingsModal: React.FC = () => {
     useShallow(s => ({ isSettingsOpen: s.isSettingsOpen, setSettingsOpen: s.setSettingsOpen })),
   );
   const closeRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isSettingsOpen) {
@@ -30,6 +32,8 @@ export const SettingsModal: React.FC = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [isSettingsOpen, setSettingsOpen]);
 
+  useFocusTrap(sheetRef, isSettingsOpen);
+
   if (!isSettingsOpen) return null;
 
   return (
@@ -40,7 +44,7 @@ export const SettingsModal: React.FC = () => {
       aria-modal="true"
       aria-labelledby="settings-title"
     >
-      <div className="modal-sheet" style={{ width: 480 }}>
+      <div ref={sheetRef} className="modal-sheet" style={{ width: 480 }}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
             <div className="icon-tile icon-tile-md">
