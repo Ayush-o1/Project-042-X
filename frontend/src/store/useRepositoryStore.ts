@@ -20,7 +20,10 @@ interface RepositoryState {
   isFetchingGit: boolean;
   analysisProgress: number; // 0 to 100
   abortController: AbortController | null;
+  /** Set only by analyze() — a full analysis failure. Drives the app-wide error screen. */
   error: string | null;
+  /** Set only by setActiveFile() — a single file's content failed to load. Scoped to the Code Viewer. */
+  fileError: string | null;
 
   /** Resource id of the current analysis; sent with every data request. */
   analysisId: string | null;
@@ -80,6 +83,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   analysisProgress: 0,
   abortController: null,
   error: null,
+  fileError: null,
 
   analysisId: null,
   metadata: null,
@@ -201,7 +205,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       openFiles.push(file);
     }
 
-    set({ activeFile: file, openFiles, isFileLoading: true, error: null, activeTab: 'code', commandPaletteOpen: false });
+    set({ activeFile: file, openFiles, isFileLoading: true, fileError: null, activeTab: 'code', commandPaletteOpen: false });
 
     try {
       const content = await fetchFileContent(file.path, state.analysisId ?? undefined);
@@ -209,8 +213,10 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
         set({ activeFileContent: content });
       }
     } catch (err) {
+      // Scoped to fileError, not the app-wide `error` — a single unreadable
+      // file must not take over the whole UI with a full-screen failure state.
       if (get().activeFile?.path === file.path) {
-        set({ error: (err as Error).message, activeFileContent: null });
+        set({ fileError: (err as Error).message, activeFileContent: null });
       }
     } finally {
       if (get().activeFile?.path === file.path) {
@@ -224,6 +230,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     const newOpenFiles = state.openFiles.filter(f => f.path !== path);
     let newActiveFile = state.activeFile;
     let newContent = state.activeFileContent;
+    let newFileError = state.fileError;
 
     if (state.activeFile?.path === path) {
       if (newOpenFiles.length > 0) {
@@ -232,9 +239,10 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       } else {
         newActiveFile = null;
         newContent = null;
+        newFileError = null;
       }
     }
-    set({ openFiles: newOpenFiles, activeFile: newActiveFile, activeFileContent: newContent });
+    set({ openFiles: newOpenFiles, activeFile: newActiveFile, activeFileContent: newContent, fileError: newFileError });
   },
 
   setActiveTab: (tab: ActiveTab) => {

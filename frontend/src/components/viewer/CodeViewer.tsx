@@ -5,7 +5,7 @@ import hljs from 'highlight.js';
 import {
   FileCode, Copy, Check, ChevronRight,
   FileText, FileJson, Image as ImageIcon,
-  File, X
+  File, X, AlertCircle
 } from 'lucide-react';
 
 /* ── Language detection from extension ─────────────────────── */
@@ -144,13 +144,14 @@ const HighlightedCode: React.FC<{ content: string; ext?: string }> = ({ content,
 /* ── Main Code Viewer ───────────────────────────────────────── */
 export const CodeViewer: React.FC = () => {
   const {
-    activeFile, activeFileContent, isFileLoading,
+    activeFile, activeFileContent, isFileLoading, fileError,
     openFiles, setActiveFile, closeFile,
   } = useRepositoryStore(
     useShallow(s => ({
       activeFile: s.activeFile,
       activeFileContent: s.activeFileContent,
       isFileLoading: s.isFileLoading,
+      fileError: s.fileError,
       openFiles: s.openFiles,
       setActiveFile: s.setActiveFile,
       closeFile: s.closeFile,
@@ -314,6 +315,27 @@ export const CodeViewer: React.FC = () => {
                 style={{ height: 14, width: `${w}%`, borderRadius: 4 }}
               />
             ))}
+          </div>
+        ) : fileError ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              gap: 'var(--space-3)',
+              padding: 'var(--space-10)',
+              textAlign: 'center',
+            }}
+          >
+            <AlertCircle size={22} color="var(--color-danger)" />
+            <p style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--color-danger)' }}>
+              Couldn't load this file
+            </p>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', maxWidth: 420, lineHeight: 'var(--leading-relaxed)' }}>
+              {fileError}
+            </p>
           </div>
         ) : activeFileContent ? (
           <div style={{ flex: 1, overflow: 'auto' }}>
