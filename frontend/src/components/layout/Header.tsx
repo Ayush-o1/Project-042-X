@@ -27,13 +27,13 @@ const EXPORT_ITEMS: ExportItem[] = [
 
 /* ── Component ──────────────────────────────────────────────── */
 interface HeaderProps {
-  /** Whether the viewport is narrow enough that the sidebar is an overlay. */
-  showSidebarToggle: boolean;
+  /** Whether the sidebar is currently visible — an overlay drawer on narrow
+   *  viewports, or the inline explorer's manual collapse state on wide ones. */
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ showSidebarToggle, sidebarOpen, onToggleSidebar }) => {
+export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) => {
   const {
     analyze, isAnalyzing, metadata,
     cancelAnalysis, analysisProgress,
@@ -157,18 +157,16 @@ export const Header: React.FC<HeaderProps> = ({ showSidebarToggle, sidebarOpen, 
 
       {/* ── Left: Sidebar Toggle, Logo & Repo Name ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexShrink: 0, minWidth: 0 }}>
-        {showSidebarToggle && (
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            className="btn-icon btn-icon-lg"
-            title={sidebarOpen ? 'Hide file explorer' : 'Show file explorer'}
-            aria-label={sidebarOpen ? 'Hide file explorer' : 'Show file explorer'}
-            aria-expanded={sidebarOpen}
-          >
-            <Menu size={16} />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className="btn-icon btn-icon-lg"
+          title={sidebarOpen ? 'Hide file explorer' : 'Show file explorer'}
+          aria-label={sidebarOpen ? 'Hide file explorer' : 'Show file explorer'}
+          aria-expanded={sidebarOpen}
+        >
+          <Menu size={16} />
+        </button>
         <div
           style={{
             width: 30, height: 30,

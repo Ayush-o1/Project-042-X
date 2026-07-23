@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { CommandPalette } from './CommandPalette';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useMediaQuery, BREAKPOINTS } from '../../hooks/useMediaQuery';
+import { usePersistedState } from '../../hooks/usePersistedState';
 import {
   Loader2, AlertCircle,
   Network, GitBranch, BarChart2, FileCode,
@@ -201,6 +202,16 @@ export const AppShell: React.FC = () => {
     }
   }, [isSidebarOverlay]);
 
+  // Manual collapse for wide viewports (>=1024px, i.e. not overlay mode) —
+  // a separate, persisted preference from the auto-managed overlay state
+  // above, which is deliberately never persisted since it should always
+  // start closed on a narrow viewport regardless of what the user last did.
+  const [sidebarCollapsed, setSidebarCollapsed] = usePersistedState('sidebarCollapsed', false);
+  const toggleSidebar = () => {
+    if (isSidebarOverlay) setSidebarOpen(v => !v);
+    else setSidebarCollapsed(v => !v);
+  };
+
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Cmd+K / Ctrl+K — Command Palette
@@ -248,9 +259,8 @@ export const AppShell: React.FC = () => {
       }}
     >
       <Header
-        showSidebarToggle={isSidebarOverlay}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(v => !v)}
+        sidebarOpen={isSidebarOverlay ? sidebarOpen : !sidebarCollapsed}
+        onToggleSidebar={toggleSidebar}
       />
 
       <div style={{ display: 'flex', overflow: 'hidden', position: 'relative' }}>
@@ -264,6 +274,7 @@ export const AppShell: React.FC = () => {
         <Sidebar
           isOverlay={isSidebarOverlay}
           isOpen={sidebarOpen}
+          isCollapsed={sidebarCollapsed}
           onRequestClose={() => setSidebarOpen(false)}
         />
 

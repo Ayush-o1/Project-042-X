@@ -1,11 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
 import {
   Search, FileCode2, FileJson, Image as ImageIcon,
-  File, FileText, Command
+  File, FileText, Command, Clock
 } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { fuzzyScore } from '../../lib/fuzzyMatch';
+import type { FileModel } from '../../types';
 
 const getFileIcon = (ext?: string): React.ReactNode => {
   if (['.ts', '.tsx'].includes(ext || '')) return <FileCode2 size={14} color="var(--lang-ts)" />;
@@ -16,6 +18,15 @@ const getFileIcon = (ext?: string): React.ReactNode => {
   return <File size={14} color="var(--text-tertiary)" />;
 };
 
+const dirOf = (path: string) => {
+  const i = path.lastIndexOf('/');
+  return i > -1 ? path.slice(0, i) : '';
+};
+const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
+
+// Highlights the contiguous substring match when there is one. Non-
+// contiguous fuzzy matches (e.g. "cvtr" -> "CommandPalette.tsx") render
+// plain — there's no single span to highlight, and that's fine.
 const highlightMatch = (text: string, query: string) => {
   if (!query) return <>{text}</>;
   const idx = text.toLowerCase().indexOf(query.toLowerCase());
@@ -32,11 +43,12 @@ const highlightMatch = (text: string, query: string) => {
 };
 
 export const CommandPalette: React.FC = () => {
-  const { commandPaletteOpen, setCommandPaletteOpen, files, setActiveFile } = useRepositoryStore(
+  const { commandPaletteOpen, setCommandPaletteOpen, files, openFiles, setActiveFile } = useRepositoryStore(
     useShallow(s => ({
       commandPaletteOpen: s.commandPaletteOpen,
       setCommandPaletteOpen: s.setCommandPaletteOpen,
       files: s.files,
+      openFiles: s.openFiles,
       setActiveFile: s.setActiveFile,
     })),
   );
@@ -46,9 +58,28 @@ export const CommandPalette: React.FC = () => {
   const listRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
 
-  const filteredFiles = files
-    .filter(f => !f.isDirectory && f.path.toLowerCase().includes(query.toLowerCase()))
-    .slice(0, 50);
+  // With no query, lead with what's already open — usually exactly what
+  // "quick switch to a file" means. Once typing starts, fuzzy-match against
+  // every file (filename matches ranked above path-only matches), the same
+  // rough heuristic VS Code's Quick Open uses.
+  const isShowingRecent = query === '';
+  const filteredFiles = useMemo(() => {
+    if (isShowingRecent) {
+      return openFiles.slice().reverse().slice(0, 20);
+    }
+    return files
+      .filter((f): f is FileModel => !f.isDirectory)
+      .map(f => {
+        const nameMatch = fuzzyScore(nameOf(f.path), query);
+        if (nameMatch !== null) return { file: f, score: nameMatch + 100 };
+        const pathMatch = fuzzyScore(f.path, query);
+        return pathMatch !== null ? { file: f, score: pathMatch } : null;
+      })
+      .filter((x): x is { file: FileModel; score: number } => x !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 50)
+      .map(x => x.file);
+  }, [files, openFiles, query, isShowingRecent]);
 
   useEffect(() => {
     if (commandPaletteOpen) {
@@ -84,12 +115,6 @@ export const CommandPalette: React.FC = () => {
   useFocusTrap(sheetRef, commandPaletteOpen);
 
   if (!commandPaletteOpen) return null;
-
-  const dirOf = (path: string) => {
-    const i = path.lastIndexOf('/');
-    return i > -1 ? path.slice(0, i) : '';
-  };
-  const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
   return (
     <div
@@ -177,71 +202,79 @@ export const CommandPalette: React.FC = () => {
                 fontSize: 'var(--text-sm)',
               }}
             >
-              No files match "{query}"
+              {isShowingRecent ? 'Start typing to search every file' : `No files match "${query}"`}
             </div>
           ) : (
-            filteredFiles.map((f, i) => {
-              const isSelected = i === selectedIndex;
-              const dir  = dirOf(f.path);
-              const name = nameOf(f.path);
-              return (
-                <div
-                  key={f.path}
-                  id={`palette-option-${i}`}
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={() => { setActiveFile(f); setCommandPaletteOpen(false); }}
-                  onMouseEnter={() => setSelectedIndex(i)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 'var(--space-4)',
-                    padding: 'var(--space-3) var(--space-5)',
-                    borderRadius: 'var(--radius-lg)',
-                    backgroundColor: isSelected ? 'var(--bg-selected)' : 'transparent',
-                    cursor: 'pointer',
-                    transition: 'background var(--duration-fast)',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', overflow: 'hidden', flex: 1 }}>
-                    <span style={{ flexShrink: 0 }}>{getFileIcon(f.extension)}</span>
-                    <span
-                      style={{
-                        fontSize: 'var(--text-sm)',
-                        fontWeight: 'var(--weight-medium)',
-                        color: isSelected ? 'var(--accent-hover)' : 'var(--text-primary)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {highlightMatch(name, query)}
-                    </span>
-                    {dir && (
+            <>
+              {isShowingRecent && (
+                <div role="presentation" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', padding: 'var(--space-2) var(--space-5)', color: 'var(--text-tertiary)' }}>
+                  <Clock size={11} />
+                  <span style={{ fontSize: 'var(--text-2xs)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Recently Opened</span>
+                </div>
+              )}
+              {filteredFiles.map((f, i) => {
+                const isSelected = i === selectedIndex;
+                const dir  = dirOf(f.path);
+                const name = nameOf(f.path);
+                return (
+                  <div
+                    key={f.path}
+                    id={`palette-option-${i}`}
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => { setActiveFile(f); setCommandPaletteOpen(false); }}
+                    onMouseEnter={() => setSelectedIndex(i)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 'var(--space-4)',
+                      padding: 'var(--space-3) var(--space-5)',
+                      borderRadius: 'var(--radius-lg)',
+                      backgroundColor: isSelected ? 'var(--bg-selected)' : 'transparent',
+                      cursor: 'pointer',
+                      transition: 'background var(--duration-fast)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', overflow: 'hidden', flex: 1 }}>
+                      <span style={{ flexShrink: 0 }}>{getFileIcon(f.extension)}</span>
                       <span
                         style={{
-                          fontSize: 'var(--text-xs)',
-                          color: 'var(--text-tertiary)',
-                          fontFamily: 'var(--font-mono)',
+                          fontSize: 'var(--text-sm)',
+                          fontWeight: 'var(--weight-medium)',
+                          color: isSelected ? 'var(--accent-hover)' : 'var(--text-primary)',
+                          whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
                         }}
                       >
-                        {dir}
+                        {highlightMatch(name, query)}
+                      </span>
+                      {dir && (
+                        <span
+                          style={{
+                            fontSize: 'var(--text-xs)',
+                            color: 'var(--text-tertiary)',
+                            fontFamily: 'var(--font-mono)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {dir}
+                        </span>
+                      )}
+                    </div>
+                    {f.extension && (
+                      <span className="badge badge-default" style={{ flexShrink: 0 }}>
+                        {f.extension.slice(1)}
                       </span>
                     )}
                   </div>
-                  {f.extension && (
-                    <span className="badge badge-default" style={{ flexShrink: 0 }}>
-                      {f.extension.slice(1)}
-                    </span>
-                  )}
-                </div>
-              );
-            })
+                );
+              })}
+            </>
           )}
         </div>
 

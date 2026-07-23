@@ -14,6 +14,7 @@ import '@xyflow/react/dist/style.css';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useMediaQuery, BREAKPOINTS } from '../../hooks/useMediaQuery';
+import { usePersistedState } from '../../hooks/usePersistedState';
 import type { DagreLayoutRequest, DagreLayoutResponse } from './dagreLayout.worker';
 import { FileNode } from './FileNode';
 import { FolderNode } from './FolderNode';
@@ -567,13 +568,20 @@ const FlowWrapper: React.FC<{
 
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [filters, setFilters] = useState<GraphFilters>({
+  // The four toggles are durable preferences (persisted across sessions);
+  // fileTypeFilter is reset per-analysis below since a leftover '.rs' filter
+  // silently hiding every file in a newly-opened JS repo would be confusing.
+  const [filters, setFilters] = usePersistedState<GraphFilters>('graphFilters', {
     showOrphans: true,
     showCycles: false,
     highlightHotspots: false,
     highlightCycles: true,
     fileTypeFilter: '',
   });
+
+  useEffect(() => {
+    setFilters(f => f.fileTypeFilter ? { ...f, fileTypeFilter: '' } : f);
+  }, [dependencies, setFilters]);
 
   // ── O(1) lookups, built once per dataset ───────────────────────────────────
   const fileSizeMap = useMemo(() => {

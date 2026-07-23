@@ -136,10 +136,13 @@ interface SidebarProps {
    *  above the content instead of sitting inline next to it. */
   isOverlay: boolean;
   isOpen: boolean;
+  /** Manual collapse on wide viewports — a separate, persisted preference
+   *  from `isOpen`/`isOverlay`. Ignored while `isOverlay` is true. */
+  isCollapsed: boolean;
   onRequestClose: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOverlay, isOpen, onRequestClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOverlay, isOpen, isCollapsed, onRequestClose }) => {
   const {
     files, metadata, favorites, openFiles,
     setActiveFile, activeFile, closeFile,
@@ -214,6 +217,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOverlay, isOpen, onRequestCl
     setActiveFile(file);
     if (isOverlay) onRequestClose();
   };
+
+  // Manual collapse only applies outside overlay mode — a narrow viewport's
+  // overlay is already fully hidden/shown via isOpen instead.
+  if (!isOverlay && isCollapsed) {
+    return <aside aria-label="File explorer" aria-hidden="true" className="sidebar-aside" style={{ width: 0, flexShrink: 0, overflow: 'hidden' }} />;
+  }
 
   return (
     <aside
