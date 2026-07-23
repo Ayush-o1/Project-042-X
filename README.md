@@ -14,6 +14,10 @@ Parsing uses SWC (Rust-based) for speed; graph layout is computed with Dagre and
 - **Integrated Code Viewer**: Jump from any graph node straight to syntax-highlighted source.
 - **Session Persistence**: Snapshot an analysis to the browser's IndexedDB and restore it instantly, plus JSON export/import and snapshot comparison.
 - **Export Engine**: PDF, Markdown, and JSON reports; PNG/SVG captures of the graph view.
+- **Fuzzy Command Palette**: `Cmd+K` fuzzy-matches every file by name or path (non-contiguous queries work, filename matches rank above path matches) and leads with recently-opened files when the query is empty.
+- **Saved Preferences**: Sidebar collapse state and the Architecture graph's filter defaults persist across sessions in `localStorage`.
+- **Responsive Layout**: Adapts from ultrawide desktops down to tablets — the sidebar becomes a dismissible overlay, dashboard/graph panels reflow instead of overflowing.
+- **Accessible by Default**: Every modal traps focus and returns it on close; the file explorer and tab bar are fully keyboard-operable; reduced-motion is respected.
 
 ## Architecture Overview
 
@@ -74,9 +78,11 @@ For a production-style build: `npm run build`, then `npm start --prefix backend`
 ## Usage
 
 - **Navigation**: Click any node in the Architecture Graph to open the Node Inspector, which links directly to the Code Viewer.
-- **Search**: Use the Command Palette (`Cmd+K` / `Ctrl+K`) to jump to any file.
-- **Persistence**: Press `Cmd+S` (or click **Save**) to snapshot the analysis into IndexedDB; restore it from **History**.
+- **Search**: Use the Command Palette (`Cmd+K` / `Ctrl+K`) to fuzzy-search any file by name or path; with nothing typed, it shows your recently-opened files.
+- **Sidebar**: Toggle the file explorer with the menu icon in the header — collapsed on wide viewports, it stays collapsed; below the tablet-landscape breakpoint the same button opens/closes it as a dismissible overlay instead.
+- **Persistence**: Press `Cmd+S` (or click **Save**) to snapshot the analysis into IndexedDB; restore it from **History**. Sidebar collapse state and the Architecture graph's filter toggles are remembered across reloads automatically.
 - **Exporting**: Use the **Export** menu. PNG/SVG capture the currently visible Architecture graph, so open that tab and frame the view first.
+- **Keyboard shortcuts**: `Cmd+K` Command Palette · `Cmd+S` Save session · `Cmd+Shift+E` Export PDF · `Esc` closes any open modal/overlay · `←`/`→` switch tabs when the tab bar is focused. Full reference in **Settings** (gear icon).
 
 ## Technology Stack
 
@@ -95,7 +101,8 @@ Project 042-X/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/    # React components (Graph, Insights, Layout, Viewer)
-│   │   ├── lib/           # Insights, Export, and Session engines
+│   │   ├── hooks/         # useMediaQuery, useFocusTrap, usePersistedState
+│   │   ├── lib/           # Insights, Export, Session, and fuzzy-match engines
 │   │   └── store/         # Zustand state management
 │   └── package.json
 └── docs/                  # Metric definitions and export specifications
@@ -113,9 +120,10 @@ The backend reads local files on behalf of the frontend, so it is deliberately l
 ## Performance Notes
 
 - **Parsing**: SWC (Rust-based) parses ASTs significantly faster than JavaScript-based parsers.
-- **Layout**: `dagre` runs synchronously on the main thread; very large graphs (thousands of nodes) cause a noticeable pause during layout.
+- **Layout**: The Architecture graph's `dagre` layout pass runs in a dedicated Web Worker, off the main thread. The Git Timeline's layout stays synchronous — it's already capped at 500 rendered nodes, where a worker's message-passing overhead would outweigh any benefit.
 - **Rendering**: React Flow virtualizes offscreen nodes; the file explorer is virtualized with `react-virtuoso`. The dependency graph's hover highlighting uses a prebuilt adjacency index (O(V+E) per hover, not a rescan of every edge).
 - **Git history**: analysis caps history at 20,000 commits (newest first) by default, and the Git Timeline additionally renders at most the 500 most recent matching commits — enough to be useful, not enough to freeze dagre layout or the DOM on very large histories.
+- **Bundle size**: the Code Viewer imports only the 14 language grammars it actually uses from `highlight.js/lib/core` (not the ~190-language default bundle), and `jsPDF`/`html-to-image` are dynamically imported only when an export action runs. Net effect: the main entry chunk is ~325 KB (~100 KB gzip) instead of ~740 KB (~235 KB gzip).
 
 ## Known Limitations
 
@@ -129,7 +137,6 @@ The backend reads local files on behalf of the frontend, so it is deliberately l
 
 ## Future Improvements
 
-- Web Worker for off-thread `dagre` layout on large graphs.
 - `tsconfig.json` path-alias and monorepo workspace resolution.
 - Virtualized Code Viewer for very large individual files.
 - Real-time file watching with incremental graph updates.

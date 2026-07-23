@@ -8,6 +8,8 @@ const SHORTCUTS = [
   { label: 'Command Palette',  keys: ['⌘', 'K'] },
   { label: 'Save Session',     keys: ['⌘', 'S'] },
   { label: 'Export PDF',       keys: ['⌘', '⇧', 'E'] },
+  { label: 'Close modal / overlay', keys: ['Esc'] },
+  { label: 'Switch tabs (when tab bar is focused)', keys: ['←', '→'] },
 ];
 
 export const SettingsModal: React.FC = () => {

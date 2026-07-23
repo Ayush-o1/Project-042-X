@@ -65,15 +65,16 @@ A purely mathematical module that calculates derived metrics from the dependency
 ### 4. Graph Engine (React Flow + Dagre)
 Separates topological data from spatial data.
 - The backend provides nodes and edges without X/Y coordinates.
-- The frontend uses `dagre` to execute a directed graph layout algorithm (Top-to-Bottom for Git, Left-to-Right for Dependencies).
+- The frontend uses `dagre` to execute a directed graph layout algorithm (Top-to-Bottom for Git, Left-to-Right for Dependencies). The Architecture graph's layout pass runs in a dedicated Web Worker so it never blocks the main thread; the Git Timeline's layout stays synchronous since it's already capped at 500 rendered nodes.
 - Coordinates are passed to `@xyflow/react` (React Flow), which renders nodes as DOM elements and edges as SVG, and handles zooming, panning, and viewport virtualization.
 - Forward/reverse adjacency indexes are built once per loaded graph; hover highlighting walks these indexes (O(V+E) per hover) instead of rescanning the edge list at every traversal step.
 - The Git Timeline caps rendered commits (most recent 500) independently of how many were analyzed, since dagre-laying-out and mounting tens of thousands of commit nodes is unusable regardless of correctness.
 
-### 4. Export & Session Engine
+### 5. Export & Session Engine
 Provides zero-configuration persistence.
 - **Sessions**: Dumps the entire Zustand store (including AST models) into `idb-keyval` (IndexedDB). Allows instant restoration of massive repositories without re-running the backend analysis.
-- **Exports**: Converts the active React Flow canvas to high-resolution PNG/SVG using `html-to-image`, or generates paginated PDF reports using `jspdf`.
+- **Exports**: Converts the active React Flow canvas to high-resolution PNG/SVG using `html-to-image`, or generates paginated PDF reports using `jspdf`. Both libraries are dynamically imported only when an export action actually runs, instead of bloating the app's initial bundle.
+- **Preferences**: `usePersistedState` mirrors a small, explicit set of durable UI preferences (sidebar collapse, graph filter defaults) to `localStorage` — a lighter-weight sibling to the session engine's full-analysis IndexedDB snapshots, not a replacement for them.
 
 ---
 
@@ -85,7 +86,7 @@ Provides zero-configuration persistence.
 4. **Staged Transfer**: The frontend fetches files, dependencies, and git data via three sequential `GET` requests (each carrying `analysisId`) so the UI can populate incrementally.
 5. **Normalization**: `src/api/client.ts` converts backend wire shapes into frontend domain models (e.g., serialized dates to timestamp strings) before the data ever reaches the store.
 6. **Metric Computation**: `computeInsights` runs once, calculating Tarjan's SCC, memoized-DFS depth, coupling, and health metrics; the result is cached in the store.
-7. **Layout Calculation**: `getDagreLayout` computes X/Y coordinates for the graph nodes; an adjacency index is built alongside for O(V+E) hover highlighting.
+7. **Layout Calculation**: `getDagreLayout` computes X/Y coordinates for the graph nodes, running inside a Web Worker for the Architecture graph so layout never blocks the main thread; an adjacency index is built alongside for O(V+E) hover highlighting.
 8. **Rendering**: React Flow renders the nodes (DOM) and edges (SVG), virtualizing offscreen elements.
 
 ---
@@ -115,7 +116,8 @@ Project 042-X/
 │   │   │   ├── insights/         # Dashboard and metric KPI components
 │   │   │   ├── layout/           # AppShell, Sidebar, Header, Modals
 │   │   │   └── viewer/           # Code Viewer implementation
-│   │   ├── lib/                  # Export, Session, and Insight algorithms
+│   │   ├── hooks/                # useMediaQuery, useFocusTrap, usePersistedState
+│   │   ├── lib/                  # Export, Session, Insight, and fuzzy-match algorithms
 │   │   ├── store/                # Zustand global state
 │   │   ├── types/                # Strict TypeScript interfaces
 │   │   └── index.css             # Vanilla CSS design system

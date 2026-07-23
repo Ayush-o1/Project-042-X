@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-23
+
+### Performance
+- Code Viewer's syntax highlighter now imports `highlight.js/lib/core` plus only the 14 language grammars the app actually requests, instead of the default entry that registers all ~190 bundled languages. The Code Viewer chunk drops from 921.9 KB to 77.3 KB (306.8 KB → 25.5 KB gzip).
+- `lib/exportEngine` (jsPDF + html-to-image) is now dynamically imported at the point each export action runs, instead of being statically bundled into the app's initial chunk. It ships as its own ~415 KB chunk that only downloads when a user actually exports something; the main entry chunk drops from 739.2 KB to ~325 KB (234.9 KB → ~100 KB gzip).
+- The Architecture graph's Dagre layout pass now runs in a Web Worker (`dagreLayout.worker.ts`) instead of blocking the main thread — the noticeable pause on repos with a few thousand files (previously called out in this file's Performance Notes) is gone. The Git Timeline's layout intentionally stays synchronous, since it's already capped at 500 rendered commits and finishes in single-digit milliseconds.
+
+### Added
+- **Saved preferences**: the sidebar can now be manually collapsed on wide viewports (previously only collapsible as an overlay on narrow ones), and the Architecture graph's filter toggles persist as defaults across sessions — both via a new localStorage-backed `usePersistedState` hook.
+- **Fuzzy Command Palette search**: replaced substring-only file matching with subsequence fuzzy matching (`lib/fuzzyMatch.ts`, unit tested) — non-contiguous queries like "cvtr" now match "CommandPalette.tsx", consecutive runs and word-boundary starts score higher, and filename matches outrank path-only matches. An empty query now leads with recently-opened files instead of an arbitrary slice of the full file list.
+- Retry action on the Code Viewer's file-load error state.
+
+## [1.3.0] - 2026-07-23
+
+### Added
+- **Responsive layout system**: a documented breakpoint scale (1440/1280/1024/768/480px) shared between CSS and a new `useMediaQuery` hook. The sidebar becomes a dismissible slide-in overlay below the tablet-landscape breakpoint; the header collapses action-button labels and the wordmark at narrower widths; dashboard KPI/2-up grids and the Dependency Graph's Node Inspector/filter panels all reflow instead of overflowing.
+- **Accessibility**: a reusable `useFocusTrap` hook wired into every modal (Settings, Session History, Compare Snapshots, Command Palette) traps Tab navigation and returns focus to the trigger element on close. The main view switcher now uses the ARIA tabs pattern (roving tabindex, arrow-key navigation). Toast notifications are announced via `aria-live`. The file explorer's folders — previously unreachable by keyboard entirely — now use proper `tree`/`treeitem` semantics.
+- Global `prefers-reduced-motion: reduce` support.
+
+### Fixed
+- The Dependency Graph's Node Inspector and its toolbar/filter/legend column occupied the exact same top-right corner, so opening the inspector visually buried the search/zoom/filter controls underneath it. The toolbar now shifts to make room when both are open.
+- `var(--accent-blue)`, referenced in three places (`FolderNode`, `CustomEdge`, `layoutUtils`) but never defined anywhere in the stylesheet, silently rendered selected-folder borders and outgoing git-edge highlights with an invalid color. Replaced with the actual `var(--accent)` token.
+- `--text-tertiary` failed WCAG AA contrast (~2.6:1 against the app background) for the small secondary/caption text it's used for everywhere; lightened to ~5:1 on the same hue.
+
+### Changed
+- Design system consistency pass: inline styles and ad-hoc `onMouseEnter`/`onMouseLeave` DOM-mutation hover handlers across the layout, insights, viewer, and graph components were replaced with the existing (and newly extended) CSS design-system class vocabulary, so equivalent UI elements now share the same spacing, radius, shadow, and transition tokens.
+
 ## [1.2.0] - 2026-07-22
 
 ### Changed
