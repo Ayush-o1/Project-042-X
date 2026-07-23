@@ -7,7 +7,6 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
-  Panel
 } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -21,15 +20,10 @@ import { FolderNode } from './FolderNode';
 import { CustomEdge } from './CustomEdge';
 import { getFolderPath } from './layoutUtils';
 import { deriveRepoRoot } from '../../lib/insightsEngine';
-import type { ModuleMetrics } from '../../lib/insightsEngine';
-import { fuzzyScore } from '../../lib/fuzzyMatch';
-import {
-  Search, ZoomIn, ZoomOut, Maximize, X, ExternalLink, FileCode,
-  Network, AlertTriangle, Users, Clock, Filter,
-  ChevronDown, GitCommit, ArrowUpRight, ArrowDownRight, Flame,
-  ShieldAlert, EyeOff, CircleDot, Hash, Loader2, Pin,
-  ChevronsDownUp, ChevronsUpDown
-} from 'lucide-react';
+import { ArchitectureToolbar } from './ArchitectureToolbar';
+import type { GraphFilters } from './ArchitectureToolbar';
+import { NodeInspector } from './NodeInspector';
+import { Network, Loader2 } from 'lucide-react';
 
 const nodeTypes = {
   fileNode: FileNode,
@@ -40,613 +34,16 @@ const edgeTypes = {
   custom: CustomEdge
 };
 
-// ─── Filter State ──────────────────────────────────────────────────────────────
-
-interface GraphFilters {
-  showOrphans: boolean;
-  showCycles: boolean;
-  highlightHotspots: boolean;
-  highlightCycles: boolean;
-  fileTypeFilter: string; // '' = all, '.ts', '.js', etc.
-}
-
-// ─── Graph Toolbar ─────────────────────────────────────────────────────────────
-
-const CustomToolbar = ({
-  nodes,
-  onSearch,
-  filters,
-  onFiltersChange,
-  fileTypes,
-  shiftLeftFor,
-  onCollapseAll,
-  onExpandAll,
-}: {
-  nodes: Node[];
-  onSearch: (id: string) => void;
-  filters: GraphFilters;
-  onFiltersChange: (f: GraphFilters) => void;
-  fileTypes: string[];
-  /** Extra right margin (CSS length) so the toolbar/filter/legend column
-   *  doesn't sit underneath the Node Inspector when both are open at once. */
-  shiftLeftFor?: string;
-  onCollapseAll: () => void;
-  onExpandAll: () => void;
-}) => {
-  const { zoomIn, zoomOut, fitView } = useReactFlow();
-  const [query, setQuery] = useState('');
-  const [focused, setFocused] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [activeResultIndex, setActiveResultIndex] = useState(0);
-
-  // Fuzzy-ranked results instead of a single blind jump to the first
-  // substring match — same scoring the Command Palette and Sidebar filter
-  // already use, so all three search entry points behave identically.
-  const results = useMemo(() => {
-    if (!query) return [];
-    return nodes
-      .filter(n => n.type === 'fileNode')
-      .map(n => {
-        const label = (n.data.label as string) || '';
-        const path = (n.data.path as string) || '';
-        const labelMatch = fuzzyScore(label, query);
-        if (labelMatch !== null) return { node: n, score: labelMatch + 100 };
-        const pathMatch = fuzzyScore(path, query);
-        return pathMatch !== null ? { node: n, score: pathMatch } : null;
-      })
-      .filter((x): x is { node: Node; score: number } => x !== null)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8)
-      .map(x => x.node);
-  }, [nodes, query]);
-
-  useEffect(() => { setActiveResultIndex(0); }, [query]);
-
-  const selectResult = (node: Node) => {
-    onSearch(node.id);
-    setQuery('');
-    setFocused(false);
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (results[activeResultIndex]) selectResult(results[activeResultIndex]);
-  };
-
-  const iconBtn = (onClick: () => void, icon: React.ReactNode, label: string, active = false) => (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="btn-icon btn-icon-md"
-      style={{ color: active ? 'var(--accent)' : 'var(--text-tertiary)' }}
-    >
-      {icon}
-    </button>
-  );
-
-  return (
-    <Panel
-      position="top-right"
-      style={{
-        margin: 'var(--space-5)',
-        marginRight: shiftLeftFor ? `calc(var(--space-5) + ${shiftLeftFor})` : 'var(--space-5)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-3)',
-        transition: 'margin-right var(--duration-normal) var(--ease-default)',
-      }}
-    >
-      {/* Main toolbar */}
-      <div className="graph-toolbar">
-        <div style={{ position: 'relative' }}>
-          <form onSubmit={handleSearch} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <Search
-              size={13}
-              style={{
-                position: 'absolute', left: 8,
-                color: focused ? 'var(--accent)' : 'var(--text-tertiary)',
-                transition: 'color var(--duration-fast)',
-                pointerEvents: 'none',
-              }}
-            />
-            <input
-              type="text"
-              placeholder="Find node…"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              onKeyDown={e => {
-                if (e.key === 'ArrowDown') { e.preventDefault(); setActiveResultIndex(i => Math.min(i + 1, results.length - 1)); }
-                else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveResultIndex(i => Math.max(i - 1, 0)); }
-                else if (e.key === 'Escape') { setQuery(''); }
-              }}
-              role="combobox"
-              aria-expanded={focused && results.length > 0}
-              aria-autocomplete="list"
-              aria-controls="graph-search-results"
-              aria-activedescendant={results[activeResultIndex] ? `graph-search-option-${activeResultIndex}` : undefined}
-              aria-label="Search graph nodes"
-              className="graph-search-input"
-            />
-          </form>
-          {focused && query && results.length > 0 && (
-            <div
-              id="graph-search-results"
-              role="listbox"
-              aria-label="Matching files"
-              className="dropdown-panel animate-slide-up"
-              style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 260, zIndex: 'var(--z-dropdown)' }}
-            >
-              {results.map((node, i) => (
-                <button
-                  key={node.id}
-                  id={`graph-search-option-${i}`}
-                  role="option"
-                  aria-selected={i === activeResultIndex}
-                  type="button"
-                  className="menu-item"
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => selectResult(node)}
-                  onMouseEnter={() => setActiveResultIndex(i)}
-                  style={{ background: i === activeResultIndex ? 'var(--bg-hover)' : undefined }}
-                >
-                  <span className="menu-item-icon"><FileCode size={13} /></span>
-                  <div style={{ overflow: 'hidden' }}>
-                    <div className="menu-item-title">{node.data.label as string}</div>
-                    <div className="menu-item-subtitle" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {node.data.path as string}
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="divider-v-sm" />
-        {iconBtn(() => zoomIn({ duration: 800 }), <ZoomIn size={15} />, 'Zoom in')}
-        {iconBtn(() => zoomOut({ duration: 800 }), <ZoomOut size={15} />, 'Zoom out')}
-        {iconBtn(() => fitView({ duration: 800 }), <Maximize size={15} />, 'Fit view')}
-        <div className="divider-v-sm" />
-        {iconBtn(onCollapseAll, <ChevronsDownUp size={15} />, 'Collapse all folders')}
-        {iconBtn(onExpandAll, <ChevronsUpDown size={15} />, 'Expand all folders')}
-        <div className="divider-v-sm" />
-        {iconBtn(() => setFilterOpen(v => !v), <Filter size={15} />, 'Filters', filterOpen)}
-      </div>
-
-      {/* Filter panel */}
-      {filterOpen && (
-        <div className="filter-panel" style={{ minWidth: 220 }}>
-          <span className="field-label">
-            Graph Filters
-          </span>
-
-          {/* Toggles */}
-          {([
-            { key: 'showOrphans',       label: 'Show Orphan Files',     icon: <EyeOff size={12} /> },
-            { key: 'showCycles',        label: 'Show Cycle Files Only',  icon: <CircleDot size={12} /> },
-            { key: 'highlightHotspots', label: 'Highlight Hotspots',    icon: <Flame size={12} /> },
-            { key: 'highlightCycles',   label: 'Highlight Cycles',      icon: <AlertTriangle size={12} /> },
-          ] as { key: keyof GraphFilters; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => {
-            const val = filters[key] as boolean;
-            return (
-              <label
-                key={key}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  cursor: 'pointer', gap: 'var(--space-3)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: val ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
-                  {icon}
-                  <span style={{ fontSize: 'var(--text-xs)' }}>{label}</span>
-                </div>
-                <div
-                  role="switch"
-                  aria-checked={val}
-                  aria-label={label}
-                  tabIndex={0}
-                  onClick={() => onFiltersChange({ ...filters, [key]: !val })}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFiltersChange({ ...filters, [key]: !val }); } }}
-                  className={`toggle-track${val ? ' is-on' : ''}`}
-                >
-                  <div className="toggle-thumb" />
-                </div>
-              </label>
-            );
-          })}
-
-          {/* File type filter */}
-          {fileTypes.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                File Type
-              </span>
-              <div style={{ position: 'relative' }}>
-                <select
-                  value={filters.fileTypeFilter}
-                  onChange={e => onFiltersChange({ ...filters, fileTypeFilter: e.target.value })}
-                  aria-label="Filter by file type"
-                  style={{
-                    width: '100%',
-                    padding: 'var(--space-2) var(--space-3)',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 'var(--radius-md)',
-                    color: 'var(--text-primary)',
-                    fontSize: 'var(--text-xs)',
-                    fontFamily: 'var(--font-mono)',
-                    cursor: 'pointer',
-                    appearance: 'none',
-                    paddingRight: 'var(--space-8)',
-                  }}
-                >
-                  <option value="">All types</option>
-                  {fileTypes.map(ext => (
-                    <option key={ext} value={ext}>{ext}</option>
-                  ))}
-                </select>
-                <ChevronDown size={12} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)', pointerEvents: 'none' }} />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Legend */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 'var(--space-5)',
-          padding: 'var(--space-3) var(--space-4)',
-          background: 'var(--bg-panel)',
-          border: '1px solid var(--border-default)',
-          borderRadius: 'var(--radius-xl)',
-          boxShadow: 'var(--shadow-sm)',
-          flexWrap: 'wrap',
-        }}
-      >
-        {[
-          { color: 'var(--lang-ts)', label: 'TypeScript' },
-          { color: 'var(--lang-js)', label: 'JavaScript' },
-          { color: 'var(--lang-json)', label: 'JSON' },
-          { color: 'var(--color-danger)', label: 'Cycle' },
-          { color: '#f59e0b', label: 'Hotspot' },
-        ].map(({ color, label }) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <div className="graph-legend-dot" style={{ background: color }} />
-            <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>{label}</span>
-          </div>
-        ))}
-      </div>
-    </Panel>
-  );
-};
-
-// ─── Inspector Row ─────────────────────────────────────────────────────────────
-
-const InspectorRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div>
-    <div className="field-label" style={{ marginBottom: 'var(--space-1)' }}>
-      {label}
-    </div>
-    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all', lineHeight: 'var(--leading-relaxed)' }}>
-      {value}
-    </div>
-  </div>
-);
-
-// ─── Inspector Health Badge ────────────────────────────────────────────────────
-
-const HealthBadge: React.FC<{ score: number }> = ({ score }) => {
-  const color = score >= 70 ? 'var(--color-success)' : score >= 40 ? 'var(--color-warning)' : 'var(--color-danger)';
-  const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Degraded' : 'Critical';
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '2px 8px', borderRadius: 100,
-      background: `color-mix(in srgb, ${color} 12%, transparent)`,
-      border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
-      color, fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-semibold)',
-      fontFamily: 'var(--font-sans)',
-    }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: color, display: 'inline-block' }} />
-      {label} ({score})
-    </span>
-  );
-};
-
-// ─── Inspector Panel ───────────────────────────────────────────────────────────
-
-interface GraphAdjacency {
-  forward: Map<string, { target: string; edgeId: string }[]>;
-  reverse: Map<string, { source: string; edgeId: string }[]>;
-}
-
-const Inspector = ({
-  node,
-  onClose,
-  onOpen,
-  moduleMetrics,
-  adjacency,
-  gitCommitMap,
-  gitAuthorsMap,
-  gitLastModifiedMap,
-  isPinned,
-  onTogglePin,
-}: {
-  node: Node;
-  onClose: () => void;
-  onOpen: (path: string) => void;
-  moduleMetrics: Map<string, ModuleMetrics>;
-  adjacency: GraphAdjacency;
-  gitCommitMap: Map<string, number>;
-  gitAuthorsMap: Map<string, string[]>;
-  gitLastModifiedMap: Map<string, string>;
-  /** Whether this node's dependency highlight is pinned (persists after the
-   *  mouse leaves it) rather than just hover-previewed. */
-  isPinned: boolean;
-  onTogglePin: () => void;
-}) => {
-  const path = node.data.path as string;
-  const fileName = path?.split('/').pop() || '';
-  const ext = fileName.includes('.') ? `.${fileName.split('.').pop()}` : '';
-  const inDegree = (node.data.inDegree as number) ?? 0;
-  const outDegree = (node.data.outDegree as number) ?? 0;
-  const size = (node.data.size as number) ?? 0;
-
-  const metrics = moduleMetrics.get(path);
-
-  // O(degree) lookups via the prebuilt adjacency index instead of scanning
-  // every edge in the graph on each render.
-  const deps = (adjacency.forward.get(path) ?? []).map(e => e.target);
-  const dependents = (adjacency.reverse.get(path) ?? []).map(e => e.source);
-
-  // Git data (all maps are keyed by absolute path)
-  const commitCount = gitCommitMap.get(path) ?? metrics?.commitCount ?? 0;
-  const authors = gitAuthorsMap.get(path) || [];
-  const lastModified = gitLastModifiedMap.get(path) || null;
-
-  const FileList: React.FC<{ paths: string[]; label: string; icon: React.ReactNode; color: string }> = ({ paths, label, icon, color }) => (
-    paths.length > 0 ? (
-      <div>
-        <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
-          {icon} {label} ({paths.length})
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 100, overflowY: 'auto' }}>
-          {paths.slice(0, 8).map((p, i) => (
-            <div key={i} style={{ fontSize: 'var(--text-2xs)', color, fontFamily: 'var(--font-mono)', padding: '2px 4px', background: 'var(--bg-elevated)', borderRadius: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p}>
-              {p.split('/').pop()}
-            </div>
-          ))}
-          {paths.length > 8 && (
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', padding: '2px 4px' }}>+{paths.length - 8} more</div>
-          )}
-        </div>
-      </div>
-    ) : null
-  );
-
-  return (
-    <div
-      className="graph-inspector"
-      style={{
-        position: 'absolute',
-        right: 'var(--space-5)',
-        top: 'var(--space-5)',
-        bottom: 'var(--space-5)',
-        background: 'var(--bg-panel)',
-        border: '1px solid var(--border-focus)',
-        borderRadius: 'var(--radius-2xl)',
-        boxShadow: 'var(--shadow-xl)',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 10,
-        overflow: 'hidden',
-        animation: 'slide-up var(--duration-normal) var(--ease-default)',
-      }}
-    >
-      {/* Header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: 'var(--space-5) var(--space-6)',
-        borderBottom: '1px solid var(--border-default)',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-          <FileCode size={14} color="var(--accent)" />
-          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)' }}>
-            Node Inspector
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
-          <button
-            type="button"
-            onClick={onTogglePin}
-            className="btn-icon btn-icon-md"
-            aria-label={isPinned ? 'Unpin dependency highlight' : 'Pin dependency highlight'}
-            aria-pressed={isPinned}
-            title={isPinned ? 'Highlight pinned — click to unpin' : 'Pin this node’s dependency highlight so it stays visible'}
-            style={{ color: isPinned ? 'var(--accent)' : 'var(--text-tertiary)' }}
-          >
-            <Pin size={14} fill={isPinned ? 'var(--accent)' : 'none'} />
-          </button>
-          <button type="button" onClick={onClose} className="btn-icon btn-icon-md" aria-label="Close inspector">
-            <X size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-
-        {/* File info */}
-        <InspectorRow label="File" value={fileName} />
-        <InspectorRow label="Path" value={path} />
-        {ext && (
-          <InspectorRow label="Extension" value={
-            <span className={`badge badge-${ext === '.ts' || ext === '.tsx' ? 'accent' : 'default'}`}>{ext}</span>
-          } />
-        )}
-
-        {/* Health Score */}
-        {metrics && (
-          <div>
-            <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
-              Module Health
-            </div>
-            <HealthBadge score={metrics.healthScore} />
-          </div>
-        )}
-
-        {/* Coupling metrics */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
-          <div className="stat-box">
-            <div className="stat-box-label">
-              <ArrowDownRight size={10} /> Fan-In
-            </div>
-            <div className="stat-box-value">{inDegree}</div>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>importers</div>
-          </div>
-          <div className="stat-box">
-            <div className="stat-box-label">
-              <ArrowUpRight size={10} /> Fan-Out
-            </div>
-            <div className="stat-box-value">{outDegree}</div>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>dependencies</div>
-          </div>
-        </div>
-
-        {/* Instability metric */}
-        {metrics && (
-          <div>
-            <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
-              <ShieldAlert size={10} /> Instability (Martin's I)
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-              <div style={{ flex: 1, height: 6, background: 'var(--bg-elevated)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${metrics.instability * 100}%`,
-                  background: metrics.instability > 0.7 ? 'var(--color-danger)' : metrics.instability > 0.4 ? 'var(--color-warning)' : 'var(--color-success)',
-                  borderRadius: 3,
-                  transition: 'width var(--duration-normal)',
-                }} />
-              </div>
-              <span style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)', minWidth: 30 }}>
-                {metrics.instability.toFixed(2)}
-              </span>
-            </div>
-            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)', marginTop: 4 }}>
-              0 = stable · 1 = unstable
-            </div>
-          </div>
-        )}
-
-        {/* Git data */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
-          <div className="stat-box">
-            <div className="stat-box-label">
-              <GitCommit size={10} /> Commits
-            </div>
-            <div className="stat-box-value">
-              {commitCount || '—'}
-            </div>
-          </div>
-          <div className="stat-box">
-            <div className="stat-box-label">
-              <Hash size={10} /> Size
-            </div>
-            <div className="stat-box-value">
-              {size > 0 ? `${(size / 1024).toFixed(1)}` : '—'}
-            </div>
-            {size > 0 && <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>KB</div>}
-          </div>
-        </div>
-
-        {/* Authors */}
-        {authors.length > 0 && (
-          <div>
-            <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
-              <Users size={10} /> Authors
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {authors.slice(0, 5).map((author, i) => (
-                <span key={i} style={{ fontSize: 'var(--text-2xs)', padding: '2px 8px', background: 'var(--accent-subtle)', color: 'var(--accent-hover)', borderRadius: 100, border: '1px solid var(--border-focus)' }}>
-                  {author}
-                </span>
-              ))}
-              {authors.length > 5 && (
-                <span style={{ fontSize: 'var(--text-2xs)', padding: '2px 8px', color: 'var(--text-tertiary)' }}>+{authors.length - 5}</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Last modified */}
-        {lastModified && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--text-tertiary)' }}>
-            <Clock size={11} />
-            <span style={{ fontSize: 'var(--text-xs)' }}>Last modified: {lastModified}</span>
-          </div>
-        )}
-
-        {/* Flags */}
-        {(metrics?.isInCycle || metrics?.isOrphan) && (
-          <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-            {metrics.isInCycle && (
-              <span style={{ fontSize: 'var(--text-2xs)', padding: '2px 8px', background: 'var(--color-danger-subtle)', color: 'var(--color-danger)', borderRadius: 100, border: '1px solid var(--color-danger-border)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <CircleDot size={9} /> In Cycle
-              </span>
-            )}
-            {metrics.isOrphan && (
-              <span style={{ fontSize: 'var(--text-2xs)', padding: '2px 8px', background: 'var(--color-warning-subtle)', color: 'var(--color-warning)', borderRadius: 100, border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <EyeOff size={9} /> Orphan
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Dependency lists */}
-        <FileList
-          paths={dependents}
-          label="Imported By"
-          icon={<ArrowDownRight size={9} />}
-          color="var(--accent-hover)"
-        />
-        <FileList
-          paths={deps}
-          label="Imports"
-          icon={<ArrowUpRight size={9} />}
-          color="var(--text-secondary)"
-        />
-      </div>
-
-      {/* Footer */}
-      <div style={{ padding: 'var(--space-4) var(--space-6)', borderTop: '1px solid var(--border-default)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-        <button
-          type="button"
-          onClick={() => onOpen(path)}
-          className="btn btn-primary btn-md"
-          style={{ width: '100%', justifyContent: 'center' }}
-        >
-          <ExternalLink size={13} />
-          Open in Code Viewer
-        </button>
-      </div>
-    </div>
-  );
-};
-
 // ─── Flow Wrapper ──────────────────────────────────────────────────────────────
 
 const FlowWrapper: React.FC<{
   externalHighlight?: string | null;
 }> = ({ externalHighlight }) => {
-  const { dependencies, files, git, insights, setActiveFile, clearGraphHighlight } =
-    useRepositoryStore(
+  const {
+    dependencies, files, git, insights, setActiveFile, clearGraphHighlight,
+    architectureCollapsedFolders, setArchitectureCollapsedFolders,
+    architecturePinnedNodeId, setArchitecturePinnedNodeId,
+  } = useRepositoryStore(
       useShallow(s => ({
         dependencies: s.dependencies,
         files: s.files,
@@ -654,6 +51,10 @@ const FlowWrapper: React.FC<{
         insights: s.insights,
         setActiveFile: s.setActiveFile,
         clearGraphHighlight: s.clearGraphHighlight,
+        architectureCollapsedFolders: s.architectureCollapsedFolders,
+        setArchitectureCollapsedFolders: s.setArchitectureCollapsedFolders,
+        architecturePinnedNodeId: s.architecturePinnedNodeId,
+        setArchitecturePinnedNodeId: s.setArchitecturePinnedNodeId,
       })),
     );
   const { setCenter } = useReactFlow();
@@ -671,8 +72,13 @@ const FlowWrapper: React.FC<{
   // the node, so you can actually read what you just highlighted instead of
   // it vanishing the instant you move toward the Inspector. Hovering a
   // *different* node still gives a temporary preview (see the highlight
-  // effect below); un-hovering reverts to whatever's pinned.
-  const [pinnedNode, setPinnedNode] = useState<string | null>(null);
+  // effect below); un-hovering reverts to whatever's pinned. The pinned id
+  // itself lives in the store (see architecturePinnedNodeId) so it survives
+  // switching tabs; selectedNode stays local (it's a full React Flow Node
+  // object, recomputed on every layout, not something worth storing globally)
+  // and is re-derived from the pinned id once nodes repopulate after a remount.
+  const pinnedNode = architecturePinnedNodeId;
+  const setPinnedNode = setArchitecturePinnedNodeId;
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   // The four toggles are durable preferences (persisted across sessions);
   // fileTypeFilter is reset per-analysis below since a leftover '.rs' filter
@@ -694,8 +100,6 @@ const FlowWrapper: React.FC<{
   // overwhelming": most repos have far more files than folders). Expanding
   // is an explicit per-folder click, not persisted across analyses since the
   // folder set is repo-specific.
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
-
   const allFolderIds = useMemo(() => {
     if (!dependencies) return new Set<string>();
     const allFolders = new Set<string>();
@@ -706,12 +110,26 @@ const FlowWrapper: React.FC<{
     return allFolders;
   }, [dependencies]);
 
+  // Seeds the store's collapse set to "all collapsed" exactly once per
+  // dataset (architectureCollapsedFolders is reset to null by analyze()/
+  // loadSessionIntoStore()). Guarding on `!== null` — rather than reseeding
+  // on every `allFolderIds` identity change — is what makes this survive a
+  // tab switch: the previous local-state version reseeded on every remount
+  // because the memo it depended on was recreated fresh each time.
   useEffect(() => {
-    setCollapsedFolders(allFolderIds);
-  }, [allFolderIds]);
+    if (!dependencies || architectureCollapsedFolders !== null) return;
+    setArchitectureCollapsedFolders(new Set(allFolderIds));
+  }, [dependencies, architectureCollapsedFolders, allFolderIds, setArchitectureCollapsedFolders]);
 
-  const handleCollapseAll = useCallback(() => setCollapsedFolders(new Set(allFolderIds)), [allFolderIds]);
-  const handleExpandAll = useCallback(() => setCollapsedFolders(new Set()), []);
+  const collapsedFolders = architectureCollapsedFolders ?? allFolderIds;
+  const handleCollapseAll = useCallback(
+    () => setArchitectureCollapsedFolders(new Set(allFolderIds)),
+    [allFolderIds, setArchitectureCollapsedFolders],
+  );
+  const handleExpandAll = useCallback(
+    () => setArchitectureCollapsedFolders(new Set()),
+    [setArchitectureCollapsedFolders],
+  );
 
   // ── O(1) lookups, built once per dataset ───────────────────────────────────
   const fileSizeMap = useMemo(() => {
@@ -809,14 +227,17 @@ const FlowWrapper: React.FC<{
       requestId,
       data: dependencies,
       direction: 'LR',
-      collapsedFolders: Array.from(collapsedFolders),
+      collapsedFolders: Array.from(architectureCollapsedFolders ?? allFolderIds),
     } satisfies DagreLayoutRequest);
 
     return () => worker.removeEventListener('message', handleMessage);
     // Re-requests layout whenever collapse state changes too, not just on a
     // new dataset — expanding/collapsing a folder is a real layout change
     // (dagre needs to reserve different space), not just a style toggle.
-  }, [dependencies, collapsedFolders]);
+    // Depends on architectureCollapsedFolders (the store value) rather than
+    // the derived `collapsedFolders` so this doesn't re-fire on the one
+    // extra render the seeding effect above causes.
+  }, [dependencies, architectureCollapsedFolders, allFolderIds]);
 
   // Terminate the worker only when the view itself unmounts, not on every
   // dependency change — it's reused across layout requests. Must null out
@@ -903,6 +324,17 @@ const FlowWrapper: React.FC<{
     setEdges(rawEdges);
   }, [rawNodes, rawEdges, insights, filters, fileSizeMap, setNodes, setEdges]);
 
+  // ── Re-open the Inspector after a remount ──────────────────────────────────
+  // architecturePinnedNodeId survives switching tabs (it lives in the store);
+  // selectedNode is local and starts null on every fresh mount. Once nodes
+  // repopulate, restore the Inspector for whatever was pinned before, instead
+  // of leaving the pin "active" with no visible panel.
+  useEffect(() => {
+    if (!architecturePinnedNodeId || selectedNode) return;
+    const node = nodes.find(n => n.id === architecturePinnedNodeId);
+    if (node && node.type !== 'folderNode') setSelectedNode(node);
+  }, [architecturePinnedNodeId, nodes, selectedNode]);
+
   // ── Hover/pin highlight (transitive dependency closure) ───────────────────
   // Traverses the memoized adjacency index (O(V+E)) and preserves object
   // identity for untouched nodes/edges so React.memo skips their re-render.
@@ -982,27 +414,28 @@ const FlowWrapper: React.FC<{
     // focuses it normally.
     const folder = getFolderPath(externalHighlight);
     if (folder && collapsedFolders.has(folder)) {
-      setCollapsedFolders(prev => {
-        const next = new Set(prev);
-        next.delete(folder);
-        return next;
-      });
+      const next = new Set(collapsedFolders);
+      next.delete(folder);
+      setArchitectureCollapsedFolders(next);
     }
   }, [externalHighlight, nodes]); // eslint-disable-line
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     if (node.type === 'folderNode') {
       const folderId = node.id;
-      setCollapsedFolders(prev => {
-        const next = new Set(prev);
-        if (next.has(folderId)) next.delete(folderId); else next.add(folderId);
-        return next;
-      });
+      // Reads the live store value rather than closing over `collapsedFolders`
+      // so this callback doesn't need it in its dependency array (which would
+      // otherwise recreate onNodeClick, and therefore ReactFlow's prop, on
+      // every single folder toggle).
+      const current = useRepositoryStore.getState().architectureCollapsedFolders ?? new Set<string>();
+      const next = new Set(current);
+      if (next.has(folderId)) next.delete(folderId); else next.add(folderId);
+      setArchitectureCollapsedFolders(next);
       return;
     }
     setSelectedNode(node);
     setPinnedNode(node.id);
-  }, []);
+  }, [setArchitectureCollapsedFolders, setPinnedNode]);
 
   const handleOpenFile = (path: string) => {
     const fileModel = files.find(f => f.path === path);
@@ -1079,13 +512,13 @@ const FlowWrapper: React.FC<{
         maxZoom={2}
       >
         <Background color="rgba(255,255,255,0.04)" gap={20} size={1} />
-        <CustomToolbar
+        <ArchitectureToolbar
           nodes={nodes}
           onSearch={handleSearchFocus}
           filters={filters}
           onFiltersChange={setFilters}
           fileTypes={fileTypes}
-          shiftLeftFor={!isCompact && selectedNode ? 'calc(320px + var(--space-4))' : undefined}
+          shiftLeftFor={!isCompact && selectedNode ? 'calc(var(--inspector-width) + var(--space-4))' : undefined}
           onCollapseAll={handleCollapseAll}
           onExpandAll={handleExpandAll}
         />
@@ -1115,7 +548,7 @@ const FlowWrapper: React.FC<{
               aria-hidden="true"
             />
           )}
-          <Inspector
+          <NodeInspector
             node={selectedNode}
             onClose={() => { setSelectedNode(null); if (pinnedNode === selectedNode.id) setPinnedNode(null); }}
             onOpen={handleOpenFile}
@@ -1125,7 +558,7 @@ const FlowWrapper: React.FC<{
             gitAuthorsMap={gitAuthorsMap}
             gitLastModifiedMap={gitLastModifiedMap}
             isPinned={pinnedNode === selectedNode.id}
-            onTogglePin={() => setPinnedNode(prev => prev === selectedNode.id ? null : selectedNode.id)}
+            onTogglePin={() => setPinnedNode(pinnedNode === selectedNode.id ? null : selectedNode.id)}
           />
         </>
       )}

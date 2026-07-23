@@ -9,7 +9,11 @@ import {
 } from '../../core/errors/RepositoryErrors';
 import { GitRepositoryError, EmptyGitRepositoryError } from '../../core/errors/GitErrors';
 
-export function errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
+// `next` is unused but required: Express only recognizes a 4-argument
+// function as error-handling middleware (dispatch is arity-based), so
+// dropping the parameter would silently fall back to Express's default
+// error handler instead of this one.
+export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
   console.error(`[Error] ${req.method} ${req.url} ->`, err.message);
 
   let statusCode = 500;

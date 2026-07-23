@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useDelayedFocus } from '../../hooks/useDelayedFocus';
 
 type SessionSummary = Omit<AnalysisSession, 'files' | 'dependencies' | 'git' | 'insights'>;
 
@@ -41,11 +42,7 @@ export const SessionHistory: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSessionHistoryOpen]);
 
-  useEffect(() => {
-    if (isSessionHistoryOpen) {
-      setTimeout(() => closeRef.current?.focus(), 50);
-    }
-  }, [isSessionHistoryOpen]);
+  useDelayedFocus(closeRef, isSessionHistoryOpen);
 
   useEffect(() => {
     if (!isSessionHistoryOpen) return;

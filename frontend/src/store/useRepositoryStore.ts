@@ -56,6 +56,18 @@ interface RepositoryState {
   isSessionHistoryOpen: boolean;
   isCompareModalOpen: boolean;
 
+  // Graph view state — lifted out of the Architecture/Git Timeline components
+  // so it survives switching tabs and coming back. Local component state
+  // reset on every remount (React Flow's whole node/edge tree unmounts when
+  // a lazy tab becomes inactive), which meant re-collapsing every folder or
+  // losing day-grouping just from checking the Code tab and coming back.
+  /** null = not yet seeded for the current dataset (seeded to "all collapsed"
+   *  by the Architecture view on first render after a new analysis). */
+  architectureCollapsedFolders: Set<string> | null;
+  architecturePinnedNodeId: string | null;
+  gitGroupByDay: boolean;
+  gitCollapsedDays: Set<string>;
+
   // Actions
   analyze: (path: string) => Promise<void>;
   cancelAnalysis: () => void;
@@ -73,6 +85,10 @@ interface RepositoryState {
   setSettingsOpen: (isOpen: boolean) => void;
   setSessionHistoryOpen: (isOpen: boolean) => void;
   setCompareModalOpen: (isOpen: boolean) => void;
+  setArchitectureCollapsedFolders: (folders: Set<string>) => void;
+  setArchitecturePinnedNodeId: (id: string | null) => void;
+  setGitGroupByDay: (value: boolean) => void;
+  setGitCollapsedDays: (days: Set<string>) => void;
   loadSessionIntoStore: (session: AnalysisSession) => void;
   /** Navigate to the dependency graph and highlight a specific node */
   navigateToGraphNode: (nodeId: string) => void;
@@ -110,6 +126,11 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   isSettingsOpen: false,
   isSessionHistoryOpen: false,
   isCompareModalOpen: false,
+
+  architectureCollapsedFolders: null,
+  architecturePinnedNodeId: null,
+  gitGroupByDay: false,
+  gitCollapsedDays: new Set(),
 
   cancelAnalysis: () => {
     const { abortController } = get();
@@ -149,7 +170,13 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       isFetchingGit: false,
       analysisProgress: 100,
       activeTab: 'insights',
-      isSessionHistoryOpen: false
+      isSessionHistoryOpen: false,
+      // Graph view state is repo-specific — a loaded session is a different
+      // dataset than whatever was on screen before, same as a fresh analyze().
+      architectureCollapsedFolders: null,
+      architecturePinnedNodeId: null,
+      gitGroupByDay: false,
+      gitCollapsedDays: new Set(),
     });
   },
 
@@ -168,6 +195,10 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       dependencies: null,
       git: null,
       insights: null,
+      architectureCollapsedFolders: null,
+      architecturePinnedNodeId: null,
+      gitGroupByDay: false,
+      gitCollapsedDays: new Set(),
     });
 
     try {
@@ -305,6 +336,22 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
 
   setCompareModalOpen: (isOpen: boolean) => {
     set({ isCompareModalOpen: isOpen });
+  },
+
+  setArchitectureCollapsedFolders: (folders: Set<string>) => {
+    set({ architectureCollapsedFolders: folders });
+  },
+
+  setArchitecturePinnedNodeId: (id: string | null) => {
+    set({ architecturePinnedNodeId: id });
+  },
+
+  setGitGroupByDay: (value: boolean) => {
+    set({ gitGroupByDay: value });
+  },
+
+  setGitCollapsedDays: (days: Set<string>) => {
+    set({ gitCollapsedDays: days });
   },
 
   navigateToGraphNode: (nodeId: string) => {

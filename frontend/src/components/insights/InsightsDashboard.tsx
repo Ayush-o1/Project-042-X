@@ -338,6 +338,23 @@ const AuthorBar: React.FC<{ author: string; count: number; pct: number; color: s
   </div>
 );
 
+/* ── Dashboard section ────────────────────────────────────────────────
+ * Groups related panels under a labeled, semantic <section> instead of
+ * everything reading as one undifferentiated stack — the dashboard has
+ * ~12 panels, and without this it's a flat scroll with no indication of
+ * what's a summary vs. a detail vs. git-specific data. */
+const DashboardSection: React.FC<{ id: string; title: string; children: React.ReactNode }> = ({ id, title, children }) => (
+  <section aria-labelledby={id} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+      <h2 id={id} className="field-label" style={{ fontSize: 'var(--text-xs)', flexShrink: 0 }}>
+        {title}
+      </h2>
+      <div style={{ flex: 1, height: 1, background: 'var(--border-default)' }} aria-hidden="true" />
+    </div>
+    {children}
+  </section>
+);
+
 /* ── LANG COLORS ──────────────────────────────────────────────────── */
 const LANG_COLORS: Record<string, string> = {
   '.ts':  'var(--lang-ts)',
@@ -426,6 +443,7 @@ export const InsightsDashboard: React.FC = () => {
         )}
       </div>
 
+      <DashboardSection id="section-overview" title="Overview">
       {/* ── Repository Health ── */}
       {repoHealthScore !== null && (
         <RepoHealthCard
@@ -516,23 +534,9 @@ export const InsightsDashboard: React.FC = () => {
           status="neutral"
         />
       </div>
+      </DashboardSection>
 
-      {/* ── Commit Activity Heatmap ── */}
-      {insights.commitActivity.length > 0 && (
-        <Panel
-          title="Commit Activity"
-          icon={<Calendar size={15} />}
-          iconColor="var(--accent)"
-          badge={
-            <span className="badge badge-accent">
-              {insights.commitActivity.reduce((s, a) => s + a.count, 0)} commits
-            </span>
-          }
-        >
-          <CommitHeatmap activity={insights.commitActivity} />
-        </Panel>
-      )}
-
+      <DashboardSection id="section-architecture" title="Architecture Signals">
       {/* ── Architecture Intelligence ── */}
       {insights.sickestModules.length > 0 && (
         <Panel
@@ -672,29 +676,6 @@ export const InsightsDashboard: React.FC = () => {
           )}
         </Panel>
 
-        {/* Most Active Git Files */}
-        <Panel
-          title="Most Active Git Files"
-          icon={<GitCommit size={15} />}
-          iconColor="var(--color-success)"
-          badge={<span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>by commits</span>}
-        >
-          {insights.mostActiveGitFiles.length === 0 ? (
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>No git data</span>
-          ) : (
-            insights.mostActiveGitFiles.slice(0, 8).map((f, i) => (
-              <BarItem
-                key={i}
-                label={f.path.split('/').pop() || f.path}
-                value={f.count}
-                maxValue={maxGitFile}
-                suffix=" commits"
-                color="var(--color-success)"
-              />
-            ))
-          )}
-        </Panel>
-
         {/* File Type Distribution */}
         <Panel
           title="File Type Distribution"
@@ -742,29 +723,6 @@ export const InsightsDashboard: React.FC = () => {
         </Panel>
 
       </div>
-
-      {/* ── Author Contributions ── */}
-      {insights.authorContributions.length > 0 && (
-        <Panel
-          title="Author Contributions"
-          icon={<Users size={15} />}
-          iconColor="var(--accent)"
-          description="Commit share by author from full git history"
-          badge={<span className="badge badge-default">{insights.authorContributions.length} authors</span>}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-            {insights.authorContributions.slice(0, 10).map((a, i) => (
-              <AuthorBar
-                key={i}
-                author={a.author}
-                count={a.count}
-                pct={a.percentage}
-                color={AUTHOR_PALETTE[i % AUTHOR_PALETTE.length]}
-              />
-            ))}
-          </div>
-        </Panel>
-      )}
 
       {/* ── Most Connected ── */}
       {insights.mostConnectedFiles.length > 0 && (
@@ -837,6 +795,73 @@ export const InsightsDashboard: React.FC = () => {
           </div>
         </Panel>
       )}
+      </DashboardSection>
+
+      <DashboardSection id="section-git-activity" title="Git Activity">
+        {/* ── Commit Activity Heatmap ── */}
+        {insights.commitActivity.length > 0 && (
+          <Panel
+            title="Commit Activity"
+            icon={<Calendar size={15} />}
+            iconColor="var(--accent)"
+            badge={
+              <span className="badge badge-accent">
+                {insights.commitActivity.reduce((s, a) => s + a.count, 0)} commits
+              </span>
+            }
+          >
+            <CommitHeatmap activity={insights.commitActivity} />
+          </Panel>
+        )}
+
+        <div className="dashboard-grid-2" style={{ gap: 'var(--space-6)' }}>
+          {/* Most Active Git Files */}
+          <Panel
+            title="Most Active Git Files"
+            icon={<GitCommit size={15} />}
+            iconColor="var(--color-success)"
+            badge={<span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>by commits</span>}
+          >
+            {insights.mostActiveGitFiles.length === 0 ? (
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>No git data</span>
+            ) : (
+              insights.mostActiveGitFiles.slice(0, 8).map((f, i) => (
+                <BarItem
+                  key={i}
+                  label={f.path.split('/').pop() || f.path}
+                  value={f.count}
+                  maxValue={maxGitFile}
+                  suffix=" commits"
+                  color="var(--color-success)"
+                />
+              ))
+            )}
+          </Panel>
+
+          {/* Author Contributions */}
+          {insights.authorContributions.length > 0 && (
+            <Panel
+              title="Author Contributions"
+              icon={<Users size={15} />}
+              iconColor="var(--accent)"
+              description="Commit share by author from full git history"
+              badge={<span className="badge badge-default">{insights.authorContributions.length} authors</span>}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                {insights.authorContributions.slice(0, 10).map((a, i) => (
+                  <AuthorBar
+                    key={i}
+                    author={a.author}
+                    count={a.count}
+                    pct={a.percentage}
+                    color={AUTHOR_PALETTE[i % AUTHOR_PALETTE.length]}
+                  />
+                ))}
+              </div>
+            </Panel>
+          )}
+        </div>
+      </DashboardSection>
     </div>
   );
 };

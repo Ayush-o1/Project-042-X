@@ -61,7 +61,7 @@ describe('GitIntelligenceEngine', () => {
   it('should correctly handle merge commits and branches', async () => {
     await fs.writeFile(path.join(tempDir, 'base.txt'), 'base');
     await git.add('.');
-    const baseCommit = await git.commit('Base');
+    await git.commit('Base');
 
     // Create branch feature
     await git.checkoutLocalBranch('feature');

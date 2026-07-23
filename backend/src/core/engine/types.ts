@@ -1,4 +1,4 @@
-import { RepositoryModel, FileModel } from '../scanner/types';
+import { FileModel } from '../scanner/types';
 import { DependencyGraph } from '../ast/DependencyGraph';
 import { GitGraph } from '../git/types';
 

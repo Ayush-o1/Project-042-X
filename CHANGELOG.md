@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-07-23
+
+### Fixed
+- Architecture graph folder-collapse state, the pinned/selected node, and Git Timeline day-grouping now live in the Zustand store instead of local component state, so they survive switching tabs and coming back instead of silently resetting.
+- The header's gear icon was labeled "Preferences" but opened a read-only keyboard-shortcut list; relabeled to match. The Command Palette's in-app copy no longer implies it runs arbitrary commands — it's a file switcher, and now says so.
+
+### Changed
+- Insights Dashboard panels are now grouped into three labeled sections (Overview, Architecture Signals, Git Activity) instead of one flat 12-panel stack.
+- Added a skip-to-content link for keyboard and screen-reader users.
+
+### Refactored
+- Deduplicated the fuzzy-search ranking logic that was independently reimplemented in the Sidebar filter, Command Palette, and both graph toolbars into one shared `rankByFuzzyMatch` utility in `lib/fuzzyMatch.ts` (unit tested).
+- Split `DependencyGraphView.tsx` (1,187 lines) into `DependencyGraphView.tsx`, `ArchitectureToolbar.tsx`, and `NodeInspector.tsx`; split `GitGraphView.tsx` into `GitGraphView.tsx` and `GitToolbar.tsx`; split `AppShell.tsx` into `AppShell.tsx` and `EmptyHero.tsx`.
+- Extracted the "focus a ref shortly after a modal opens" pattern — previously hand-copied in four modals — into a `useDelayedFocus` hook.
+- Backend: enabled `noUnusedLocals`/`noUnusedParameters` in `tsconfig.json` and removed the dead code it caught (an unused constructor parameter, an unused type import, unused test bindings).
+
 ## [1.5.0] - 2026-07-23
 
 ### Added

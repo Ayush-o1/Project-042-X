@@ -40,7 +40,7 @@ describe('RepositoryIntelligenceEngine', () => {
 
     // 2. Commit them
     await git.add('.');
-    const c1 = await git.commit('Initial feature');
+    await git.commit('Initial feature');
 
     // 3. Create a new branch
     await git.checkoutLocalBranch('feature-x');

@@ -39,3 +39,53 @@ export function fuzzyScore(text: string, query: string): number | null {
   score -= (t.length - q.length) * 0.1;
   return score;
 }
+
+/**
+ * Score bonus applied to a primary-field match (filename, commit message) so
+ * it always outranks a match found only in a fallback field (full path,
+ * hash) — the standard priority every fuzzy search entry point in the app
+ * gives a name match over a path-only one.
+ */
+export const FILENAME_MATCH_BONUS = 100;
+
+/** One field to fuzzy-match against, for {@link rankByFuzzyMatch}. */
+export interface FuzzyField<T> {
+  get: (item: T) => string;
+  /**
+   * Added to this field's score when it matches. Used to make one field
+   * (e.g. a filename) always outrank another (e.g. its full path) even when
+   * the path's raw match would otherwise score higher — large enough that a
+   * matching bonused field never loses to a non-bonused one in practice,
+   * mirroring how VS Code's Quick Open ranks name matches above path-only
+   * ones.
+   */
+  bonus?: number;
+}
+
+/**
+ * Ranks items by the best fuzzy match across one or more text fields per
+ * item, descending, filtering out items that match none of the fields.
+ *
+ * This is the one ranking algorithm behind every fuzzy search entry point in
+ * the app — the Command Palette, the Sidebar filter, and both graph
+ * toolbars all fuzzy-match a primary field (name/label/message) with a
+ * lower-priority fallback field (path/hash), and previously each
+ * reimplemented that by hand.
+ */
+export function rankByFuzzyMatch<T>(items: T[], query: string, fields: FuzzyField<T>[]): T[] {
+  if (!query) return [];
+
+  const scored: { item: T; score: number }[] = [];
+  for (const item of items) {
+    let best: number | null = null;
+    for (const { get, bonus = 0 } of fields) {
+      const match = fuzzyScore(get(item), query);
+      if (match === null) continue;
+      const score = match + bonus;
+      if (best === null || score > best) best = score;
+    }
+    if (best !== null) scored.push({ item, score: best });
+  }
+
+  return scored.sort((a, b) => b.score - a.score).map(x => x.item);
+}

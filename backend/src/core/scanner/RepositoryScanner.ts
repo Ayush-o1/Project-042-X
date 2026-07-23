@@ -83,7 +83,7 @@ export class RepositoryScanner {
         }
       } else if (entry.isFile()) {
         if (!this.ignoreFilter.shouldIgnore(relativePath, false)) {
-          await this.processFile(rootPath, fullPath, relativePath, files);
+          await this.processFile(fullPath, relativePath, files);
         }
       }
     });
@@ -94,7 +94,7 @@ export class RepositoryScanner {
   /**
    * Extracts metadata for a single file if it is supported and within size limits.
    */
-  private async processFile(rootPath: string, fullPath: string, relativePath: string, files: FileModel[]): Promise<void> {
+  private async processFile(fullPath: string, relativePath: string, files: FileModel[]): Promise<void> {
     const extension = path.extname(fullPath);
 
     // Filter by supported extensions before stat'ing to save I/O overhead

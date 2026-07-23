@@ -5,6 +5,7 @@ import { listSessions, loadSession } from '../../lib/sessionEngine';
 import type { AnalysisSession } from '../../lib/sessionEngine';
 import { X, ArrowRight, GitCompare, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useDelayedFocus } from '../../hooks/useDelayedFocus';
 import { useToast } from '../../hooks/useToast';
 
 type SessionSummary = { id: string; name: string; timestamp: string; path: string };
@@ -52,12 +53,13 @@ export const CompareSnapshots: React.FC = () => {
   const sheetRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
+  useDelayedFocus(closeRef, isCompareModalOpen);
+
   useEffect(() => {
     if (isCompareModalOpen) {
       listSessions()
         .then(list => setSessions(list as SessionSummary[]))
         .catch(() => toast.error('Could not list sessions', 'Failed to read from IndexedDB.'));
-      setTimeout(() => closeRef.current?.focus(), 50);
     } else {
       setSessionA(null);
       setSessionB(null);
@@ -65,7 +67,7 @@ export const CompareSnapshots: React.FC = () => {
     // Deliberately omits `toast`: the context value it comes from is a new
     // object on every ToastProvider render (any toast firing anywhere in the
     // app), and re-running this effect on that would re-fetch the session
-    // list and re-steal focus every time an unrelated toast pops up.
+    // list every time an unrelated toast pops up.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCompareModalOpen]);
 

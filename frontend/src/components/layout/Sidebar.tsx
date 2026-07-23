@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
 import type { FileModel } from '../../types';
-import { fuzzyScore } from '../../lib/fuzzyMatch';
+import { rankByFuzzyMatch, FILENAME_MATCH_BONUS } from '../../lib/fuzzyMatch';
 
 /* ── Tree types ─────────────────────────────────────────────── */
 interface TreeNode {
@@ -169,19 +169,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOverlay, isOpen, isCollapsed
    * two search entry points behave identically. */
   const searchResults = useMemo(() => {
     if (!query) return null;
-    return files
-      .filter((f): f is FileModel => !f.isDirectory)
-      .map(f => {
-        const name = f.name;
-        const nameMatch = fuzzyScore(name, query);
-        if (nameMatch !== null) return { file: f, score: nameMatch + 100 };
-        const pathMatch = fuzzyScore(f.path, query);
-        return pathMatch !== null ? { file: f, score: pathMatch } : null;
-      })
-      .filter((x): x is { file: FileModel; score: number } => x !== null)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 200)
-      .map(x => x.file);
+    const files_ = files.filter((f): f is FileModel => !f.isDirectory);
+    return rankByFuzzyMatch(files_, query, [
+      { get: f => f.name, bonus: FILENAME_MATCH_BONUS },
+      { get: f => f.path },
+    ]).slice(0, 200);
   }, [files, query]);
 
   /* Build the flat visible tree (memoized) */

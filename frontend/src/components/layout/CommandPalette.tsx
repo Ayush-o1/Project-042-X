@@ -6,7 +6,8 @@ import {
   File, FileText, Command, Clock
 } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { fuzzyScore } from '../../lib/fuzzyMatch';
+import { useDelayedFocus } from '../../hooks/useDelayedFocus';
+import { rankByFuzzyMatch, FILENAME_MATCH_BONUS } from '../../lib/fuzzyMatch';
 import type { FileModel } from '../../types';
 
 const getFileIcon = (ext?: string): React.ReactNode => {
@@ -67,27 +68,21 @@ export const CommandPalette: React.FC = () => {
     if (isShowingRecent) {
       return openFiles.slice().reverse().slice(0, 20);
     }
-    return files
-      .filter((f): f is FileModel => !f.isDirectory)
-      .map(f => {
-        const nameMatch = fuzzyScore(nameOf(f.path), query);
-        if (nameMatch !== null) return { file: f, score: nameMatch + 100 };
-        const pathMatch = fuzzyScore(f.path, query);
-        return pathMatch !== null ? { file: f, score: pathMatch } : null;
-      })
-      .filter((x): x is { file: FileModel; score: number } => x !== null)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 50)
-      .map(x => x.file);
+    const nonDirFiles = files.filter((f): f is FileModel => !f.isDirectory);
+    return rankByFuzzyMatch(nonDirFiles, query, [
+      { get: f => nameOf(f.path), bonus: FILENAME_MATCH_BONUS },
+      { get: f => f.path },
+    ]).slice(0, 50);
   }, [files, openFiles, query, isShowingRecent]);
 
   useEffect(() => {
     if (commandPaletteOpen) {
       setQuery('');
       setSelectedIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [commandPaletteOpen]);
+
+  useDelayedFocus(inputRef, commandPaletteOpen);
 
   useEffect(() => { setSelectedIndex(0); }, [query]);
 

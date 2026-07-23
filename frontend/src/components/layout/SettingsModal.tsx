@@ -3,9 +3,10 @@ import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
 import { X, Keyboard } from 'lucide-react';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useDelayedFocus } from '../../hooks/useDelayedFocus';
 
 const SHORTCUTS = [
-  { label: 'Command Palette',  keys: ['⌘', 'K'] },
+  { label: 'Go to File',       keys: ['⌘', 'K'] },
   { label: 'Save Session',     keys: ['⌘', 'S'] },
   { label: 'Export PDF',       keys: ['⌘', '⇧', 'E'] },
   { label: 'Close modal / overlay', keys: ['Esc'] },
@@ -19,11 +20,7 @@ export const SettingsModal: React.FC = () => {
   const closeRef = useRef<HTMLButtonElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (isSettingsOpen) {
-      setTimeout(() => closeRef.current?.focus(), 50);
-    }
-  }, [isSettingsOpen]);
+  useDelayedFocus(closeRef, isSettingsOpen);
 
   useEffect(() => {
     if (!isSettingsOpen) return;
@@ -105,8 +102,8 @@ export const SettingsModal: React.FC = () => {
             }}
           >
             <span style={{ color: 'var(--accent-hover)', fontWeight: 'var(--weight-medium)' }}>Tip: </span>
-            Use <kbd className="kbd">⌘K</kbd> anywhere in the app to open the Command Palette
-            and quickly jump to any file.
+            Use <kbd className="kbd">⌘K</kbd> anywhere in the app to quickly jump to any file
+            by name or path.
           </div>
         </div>
       </div>

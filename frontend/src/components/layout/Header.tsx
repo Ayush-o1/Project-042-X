@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import {
-  FolderGit2, Search, XCircle, Settings, Save,
+  FolderGit2, Search, XCircle, Keyboard, Save,
   Download, Clock, GitCompare, ChevronDown, Menu,
   FileImage, FileCode2, FileText, FileJson, Loader2
 } from 'lucide-react';
@@ -367,15 +367,18 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
           </>
         )}
 
-        {/* Settings */}
+        {/* Keyboard shortcuts reference — the gear icon previously here was
+            labeled "Preferences", but there are no configurable preferences
+            behind it, only this shortcut list. Labeling it for what it
+            actually opens instead of what a settings icon usually implies. */}
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
           className="btn-icon btn-icon-lg"
-          title="Preferences"
-          aria-label="Open preferences"
+          title="Keyboard shortcuts"
+          aria-label="Open keyboard shortcuts"
         >
-          <Settings size={16} />
+          <Keyboard size={16} />
         </button>
       </div>
     </header>
