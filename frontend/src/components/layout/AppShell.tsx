@@ -13,7 +13,6 @@ import { SettingsModal } from './SettingsModal';
 import { SessionHistory } from './SessionHistory';
 import { CompareSnapshots } from '../insights/CompareSnapshots';
 import { saveSession } from '../../lib/sessionEngine';
-import { exportReportPdf } from '../../lib/exportEngine';
 import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '../ui/Toast';
 
@@ -227,8 +226,10 @@ export const AppShell: React.FC = () => {
         e.preventDefault();
         const { metadata, insights } = useRepositoryStore.getState();
         if (metadata && insights) {
-          exportReportPdf(metadata, insights);
-          toast.success('PDF exported', 'Architecture report downloaded.');
+          import('../../lib/exportEngine').then(({ exportReportPdf }) => {
+            exportReportPdf(metadata, insights);
+            toast.success('PDF exported', 'Architecture report downloaded.');
+          });
         }
       }
     };

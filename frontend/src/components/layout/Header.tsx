@@ -6,10 +6,6 @@ import {
   FileImage, FileCode2, FileText, FileJson, Loader2
 } from 'lucide-react';
 import { saveSession } from '../../lib/sessionEngine';
-import {
-  exportGraphToPng, exportGraphToSvg,
-  exportReportMarkdown, exportReportJson, exportReportPdf
-} from '../../lib/exportEngine';
 import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '../ui/Toast';
 
@@ -109,20 +105,24 @@ export const Header: React.FC<HeaderProps> = ({ showSidebarToggle, sidebarOpen, 
 
     setIsExporting(true);
     try {
+      // jsPDF and html-to-image are only needed for these on-demand actions,
+      // so they're pulled in as a separate chunk instead of bloating the
+      // initial bundle every visitor downloads.
+      const exportEngine = await import('../../lib/exportEngine');
       if (format === 'png') {
-        await exportGraphToPng('architecture-graph-container');
+        await exportEngine.exportGraphToPng('architecture-graph-container');
         toast.success('PNG exported', 'High-resolution graph image downloaded.');
       } else if (format === 'svg') {
-        await exportGraphToSvg('architecture-graph-container');
+        await exportEngine.exportGraphToSvg('architecture-graph-container');
         toast.success('SVG exported', 'Vector graph image downloaded.');
       } else if (format === 'md') {
-        exportReportMarkdown(metadata, insights);
+        exportEngine.exportReportMarkdown(metadata, insights);
         toast.success('Markdown exported', 'Architecture report downloaded.');
       } else if (format === 'json') {
-        exportReportJson(metadata, insights, files);
+        exportEngine.exportReportJson(metadata, insights, files);
         toast.success('JSON exported', 'Machine-readable report downloaded.');
       } else if (format === 'pdf') {
-        exportReportPdf(metadata, insights);
+        exportEngine.exportReportPdf(metadata, insights);
         toast.success('PDF exported', 'Printable report downloaded.');
       }
     } catch {

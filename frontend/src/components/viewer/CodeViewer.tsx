@@ -1,7 +1,26 @@
 import React, { useMemo, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
-import hljs from 'highlight.js';
+// `highlight.js`'s default entry registers all ~190 bundled grammars (the
+// bulk of this chunk's weight). This app only ever requests the languages
+// in EXT_TO_HLJS below, so we pull the core build and register just those —
+// highlightAuto's detection universe narrows to the same set, which is the
+// deliberate tradeoff for the bundle-size win.
+import hljs from 'highlight.js/lib/core';
+import typescript from 'highlight.js/lib/languages/typescript';
+import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
+import markdown from 'highlight.js/lib/languages/markdown';
+import css from 'highlight.js/lib/languages/css';
+import xml from 'highlight.js/lib/languages/xml';
+import bash from 'highlight.js/lib/languages/bash';
+import yaml from 'highlight.js/lib/languages/yaml';
+import ini from 'highlight.js/lib/languages/ini';
+import python from 'highlight.js/lib/languages/python';
+import go from 'highlight.js/lib/languages/go';
+import rust from 'highlight.js/lib/languages/rust';
+import sql from 'highlight.js/lib/languages/sql';
+import graphql from 'highlight.js/lib/languages/graphql';
 import {
   FileCode, Copy, Check, ChevronRight,
   FileText, FileJson, Image as ImageIcon,
@@ -30,6 +49,22 @@ const EXT_TO_HLJS: Record<string, string> = {
   '.sql':   'sql',
   '.graphql': 'graphql',
 };
+
+// Registered once per session — every grammar EXT_TO_HLJS can ever request.
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('markdown', markdown);
+hljs.registerLanguage('css', css);
+hljs.registerLanguage('html', xml);
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('yaml', yaml);
+hljs.registerLanguage('ini', ini);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('go', go);
+hljs.registerLanguage('rust', rust);
+hljs.registerLanguage('sql', sql);
+hljs.registerLanguage('graphql', graphql);
 
 /* ── File tab icon ──────────────────────────────────────────── */
 const getIcon = (ext?: string): React.ReactNode => {
