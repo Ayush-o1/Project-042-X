@@ -6,7 +6,9 @@ import {
   FileAccessDeniedError,
   FileSystemAccessError,
   NoRepositoryAnalyzedError,
+  LocalPathAnalysisDisabledError,
 } from '../../core/errors/RepositoryErrors';
+import { isGitHubRepoUrl, cloneRepositoryForAnalysis, cleanupClonedRepository } from '../../core/scanner/RemoteRepositoryFetcher';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -16,10 +18,22 @@ interface AnalysisEntry {
   /** Exact set of file paths discovered by the scanner — the only files readable via the API. */
   scannedPaths: Set<string>;
   createdAt: number;
+  /** Set only when this analysis came from a cloned GitHub URL — the temp
+   *  directory backing every file this entry can serve. Deleted once the
+   *  entry is evicted; kept alive until then since the Code Viewer reads
+   *  file contents from disk lazily, well after analyze() has returned. */
+  cloneDir?: string;
 }
 
 /** Number of completed analyses kept in memory before evicting the oldest. */
 const MAX_CACHED_ANALYSES = 3;
+
+/** When true, this deployment only analyzes public GitHub URLs — local
+ *  filesystem paths are rejected outright. Set on a public deployment
+ *  (Render), where accepting an arbitrary path from a browser would let
+ *  anyone browse the server's own filesystem. Local development leaves
+ *  this unset, unchanged from before remote analysis existed. */
+const PUBLIC_DEMO_MODE = process.env.PUBLIC_DEMO_MODE === 'true';
 
 /**
  * Holds completed analyses as addressable resources.
@@ -47,20 +61,32 @@ export class RepositoryService {
   }
 
   public async analyzeRepository(
-    repoPath: string,
+    repoTarget: string,
     options?: AnalyzeOptions,
   ): Promise<{ analysisId: string; model: UnifiedRepositoryModel }> {
-    const model = await this.engine.analyze(repoPath, options);
-    const id = randomUUID();
-    this.analyses.set(id, {
-      id,
-      model,
-      scannedPaths: new Set(model.files.map(f => f.path)),
-      createdAt: Date.now(),
-    });
-    this.latestId = id;
-    this.evictOldest();
-    return { analysisId: id, model };
+    const isUrl = isGitHubRepoUrl(repoTarget);
+    if (!isUrl && PUBLIC_DEMO_MODE) throw new LocalPathAnalysisDisabledError();
+
+    const cloneDir = isUrl ? await cloneRepositoryForAnalysis(repoTarget) : undefined;
+    try {
+      const model = await this.engine.analyze(cloneDir ?? repoTarget, options);
+      const id = randomUUID();
+      this.analyses.set(id, {
+        id,
+        model,
+        scannedPaths: new Set(model.files.map(f => f.path)),
+        createdAt: Date.now(),
+        cloneDir,
+      });
+      this.latestId = id;
+      await this.evictOldest();
+      return { analysisId: id, model };
+    } catch (err) {
+      // The analysis never made it into the cache, so nothing will evict
+      // (and clean up) this clone later — do it now.
+      if (cloneDir) await cleanupClonedRepository(cloneDir);
+      throw err;
+    }
   }
 
   public getModel(analysisId?: string): UnifiedRepositoryModel {
@@ -145,7 +171,8 @@ export class RepositoryService {
     return latest;
   }
 
-  private evictOldest(): void {
+  private async evictOldest(): Promise<void> {
+    const toClean: string[] = [];
     while (this.analyses.size > MAX_CACHED_ANALYSES) {
       let oldest: AnalysisEntry | null = null;
       for (const entry of this.analyses.values()) {
@@ -153,6 +180,8 @@ export class RepositoryService {
       }
       if (!oldest) break;
       this.analyses.delete(oldest.id);
+      if (oldest.cloneDir) toClean.push(oldest.cloneDir);
     }
+    await Promise.all(toClean.map(cleanupClonedRepository));
   }
 }

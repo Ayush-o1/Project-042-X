@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '../../hooks/useToast';
+import { PUBLIC_DEMO_MODE } from '../../lib/config';
 import { listSessions, loadSession } from '../../lib/sessionEngine';
 import type { AnalysisSession } from '../../lib/sessionEngine';
 import {
@@ -109,9 +110,9 @@ export const EmptyHero: React.FC = () => {
           lineHeight: 'var(--leading-relaxed)',
           marginBottom: 'var(--space-8)',
         }}>
-          Point 042-X at any local Git repository to parse every file, extract
-          its dependency graph, and reveal the full structure of your codebase
-          — entirely on your machine.
+          {PUBLIC_DEMO_MODE
+            ? 'Point 042-X at any public GitHub repository to parse every file, extract its dependency graph, and reveal the full structure of the codebase.'
+            : 'Point 042-X at any local Git repository — or a public GitHub URL — to parse every file, extract its dependency graph, and reveal the full structure of your codebase.'}
         </p>
 
         <button
@@ -128,7 +129,9 @@ export const EmptyHero: React.FC = () => {
           fontFamily: 'var(--font-mono)',
           marginTop: 'var(--space-4)',
         }}>
-          Enter an absolute path in the bar above, e.g. /Users/you/your-project
+          {PUBLIC_DEMO_MODE
+            ? 'Paste a GitHub URL in the bar above, e.g. https://github.com/expressjs/express'
+            : 'Enter an absolute path or a GitHub URL in the bar above, e.g. /Users/you/your-project'}
         </p>
       </div>
 

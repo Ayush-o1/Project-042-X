@@ -101,6 +101,7 @@ export const ModuleTreemap = ({
               className={`treemap-mode-btn${colorMode === m.key ? ' active' : ''}`}
               onClick={() => onColorModeChange(m.key)}
               title={`Color by ${m.label}`}
+              aria-label={`Color by ${m.label}`}
               aria-pressed={colorMode === m.key}
             >
               {m.icon}
@@ -133,6 +134,7 @@ export const ModuleTreemap = ({
               onMouseLeave={() => setHovered(h => (h === cell.path ? null : h))}
               onClick={() => onSelectFolder(cell.path)}
               title={`${cell.path} — ${cell.fileCount} file${cell.fileCount === 1 ? '' : 's'}, health ${Math.round(cell.avgHealthScore)}, ${cell.internalEdges + cell.externalEdges === 0 ? 0 : Math.round(cell.cohesion * 100)}% cohesion`}
+              aria-label={`${label} — ${cell.fileCount} file${cell.fileCount === 1 ? '' : 's'}, health ${Math.round(cell.avgHealthScore)}`}
             >
               {showLabel && (
                 <span className="treemap-cell-label">

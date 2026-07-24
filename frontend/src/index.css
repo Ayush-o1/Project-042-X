@@ -2239,6 +2239,7 @@ code, pre, kbd {
   border-bottom: 1px solid var(--border-default);
   background: var(--bg-panel);
   flex-shrink: 0;
+  overflow-x: auto;
 }
 
 .architecture-depth-stepper {

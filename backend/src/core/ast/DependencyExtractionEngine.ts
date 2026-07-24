@@ -42,7 +42,7 @@ export class DependencyExtractionEngine {
       let content: string;
       try {
         content = await fs.readFile(file.path, 'utf8');
-      } catch (e) {
+      } catch {
         console.warn(`Failed to read file for parsing: ${file.path}`);
         return;
       }
@@ -50,7 +50,7 @@ export class DependencyExtractionEngine {
       let parsedDeps;
       try {
         parsedDeps = await this.parser.parse(file.path, content);
-      } catch (e) {
+      } catch {
         const node = graph.getNode(file.path);
         if (node) node.hasSyntaxError = true;
         console.warn(`Syntax error in ${file.path}`);

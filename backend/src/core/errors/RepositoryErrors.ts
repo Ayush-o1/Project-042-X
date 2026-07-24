@@ -32,3 +32,31 @@ export class AnalysisNotFoundError extends Error {
     this.name = 'AnalysisNotFoundError';
   }
 }
+
+export class InvalidRepositoryUrlError extends Error {
+  constructor(url: string) {
+    super(`"${url}" is not a public GitHub repository URL that could be cloned. Expected a form like https://github.com/owner/repo.`);
+    this.name = 'InvalidRepositoryUrlError';
+  }
+}
+
+export class RepositoryCloneTimeoutError extends Error {
+  constructor(url: string) {
+    super(`Timed out cloning ${url}. The repository may be too large or unreachable.`);
+    this.name = 'RepositoryCloneTimeoutError';
+  }
+}
+
+export class RepositoryTooLargeError extends Error {
+  constructor(url: string, limitBytes: number) {
+    super(`${url} exceeds the ${Math.round(limitBytes / (1024 * 1024))}MB size limit for demo analysis.`);
+    this.name = 'RepositoryTooLargeError';
+  }
+}
+
+export class LocalPathAnalysisDisabledError extends Error {
+  constructor() {
+    super('This deployment only analyzes public GitHub repository URLs, not local filesystem paths.');
+    this.name = 'LocalPathAnalysisDisabledError';
+  }
+}

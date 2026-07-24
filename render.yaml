@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: project-042x-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: HOST
+        value: 0.0.0.0
+      - key: PUBLIC_DEMO_MODE
+        value: "true"
+      # Set after the Vercel frontend is deployed, to the deployed
+      # https://<project>.vercel.app URL (comma-separate multiple origins).
+      - key: ALLOWED_ORIGINS
+        sync: false

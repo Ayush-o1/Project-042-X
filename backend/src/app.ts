@@ -7,6 +7,15 @@ import { hostGuard } from './api/middlewares/hostGuard';
 
 export const app = express();
 
+// Render (and most PaaS hosts) sit behind a reverse proxy — without this,
+// every request appears to come from the proxy's IP, which would make the
+// analyze rate limit share one bucket across every visitor instead of
+// limiting per-client. Only trusted in public mode; a local dev server has
+// no proxy in front of it.
+if (process.env.PUBLIC_DEMO_MODE === 'true') {
+  app.set('trust proxy', 1);
+}
+
 // This API reads local files, so it must never be drivable by arbitrary websites.
 // Only local dev/preview origins may read responses; ALLOWED_ORIGINS overrides.
 const allowedOrigins: (string | RegExp)[] = process.env.ALLOWED_ORIGINS

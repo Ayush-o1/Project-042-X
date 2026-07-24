@@ -6,6 +6,10 @@ import {
   FileAccessDeniedError,
   NoRepositoryAnalyzedError,
   AnalysisNotFoundError,
+  InvalidRepositoryUrlError,
+  RepositoryCloneTimeoutError,
+  RepositoryTooLargeError,
+  LocalPathAnalysisDisabledError,
 } from '../../core/errors/RepositoryErrors';
 import { GitRepositoryError, EmptyGitRepositoryError } from '../../core/errors/GitErrors';
 
@@ -44,6 +48,22 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
   } else if (err instanceof AnalysisNotFoundError) {
     statusCode = 404;
     code = 'ANALYSIS_NOT_FOUND';
+    message = err.message;
+  } else if (err instanceof InvalidRepositoryUrlError) {
+    statusCode = 422;
+    code = 'INVALID_REPOSITORY_URL';
+    message = err.message;
+  } else if (err instanceof RepositoryCloneTimeoutError) {
+    statusCode = 504;
+    code = 'CLONE_TIMEOUT';
+    message = err.message;
+  } else if (err instanceof RepositoryTooLargeError) {
+    statusCode = 413;
+    code = 'REPOSITORY_TOO_LARGE';
+    message = err.message;
+  } else if (err instanceof LocalPathAnalysisDisabledError) {
+    statusCode = 403;
+    code = 'LOCAL_PATH_DISABLED';
     message = err.message;
   } else if (err.name === 'ZodError') {
     statusCode = 400;

@@ -8,6 +8,7 @@ import {
 import { saveSession } from '../../lib/sessionEngine';
 import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '../../hooks/useToast';
+import { PUBLIC_DEMO_MODE } from '../../lib/config';
 
 /* ── Export menu items ──────────────────────────────────────── */
 interface ExportItem {
@@ -223,7 +224,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
             ref={inputRef}
             id="repo-path-input"
             type="text"
-            placeholder="Enter absolute path to repository…"
+            placeholder={PUBLIC_DEMO_MODE ? 'Paste a public GitHub repo URL…' : 'Absolute path, or a GitHub repo URL…'}
             value={pathInput}
             onChange={e => setPathInput(e.target.value)}
             disabled={isAnalyzing}
