@@ -1022,17 +1022,6 @@ code, pre, kbd {
 /* ────────────────────────────────────────────────────────────
    21. GRAPH STYLES
    ──────────────────────────────────────────────────────────── */
-.graph-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--bg-panel);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-md);
-}
-
 .graph-search-input {
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
@@ -1050,13 +1039,6 @@ code, pre, kbd {
 }
 .graph-search-input::placeholder {
   color: var(--text-tertiary);
-}
-
-.graph-legend-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -1565,12 +1547,17 @@ code, pre, kbd {
   max-width: calc(100vw - var(--space-10));
 }
 
-/* Dependency graph's Node Inspector. Fixed 320px on desktop; below the
-   tablet-landscape breakpoint it becomes a full-height drawer (capped to
-   the viewport width) with a dismissible backdrop, matching the sidebar's
-   overlay pattern, since there isn't room to dock it beside the toolbar. */
+/* Dependency graph's Node Inspector. Fills whatever container docks it —
+   a fixed-width grid column on desktop (see ARCHITECTURE LAYOUT below), a
+   full-height drawer with a dismissible backdrop below the
+   tablet-landscape breakpoint, matching the sidebar's overlay pattern. */
 .graph-inspector {
-  width: min(var(--inspector-width), calc(100vw - var(--space-10)));
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-panel);
 }
 .graph-inspector-backdrop {
   position: absolute;
@@ -1581,7 +1568,7 @@ code, pre, kbd {
 }
 
 /* ────────────────────────────────────────────────────────────
-   24O. GRAPH NODE HOVER (Architecture graph — FileNode, FolderNode)
+   24O. GRAPH NODE HOVER (Architecture focus canvas — FileNode)
    ──────────────────────────────────────────────────────────── */
 /* Border/background/box-shadow are data-driven (cycle/hotspot/selected) and
    stay inline; only the hover-only scale transform moves to CSS, gated by
@@ -1590,23 +1577,15 @@ code, pre, kbd {
   transform: scale(1.02);
 }
 
-/* Smooth repositioning when dagre re-lays-out the graph (folder collapse,
-   day-group toggle, filter changes) instead of nodes jumping instantly to
-   their new slot. Disabled during an active drag so manual dragging stays
-   1:1 with the pointer instead of lagging behind it. */
+/* Smooth repositioning when a new focus/depth re-lays-out the neighborhood
+   instead of nodes jumping instantly to their new slot. Disabled during an
+   active drag so manual dragging stays 1:1 with the pointer instead of
+   lagging behind it. */
 .react-flow__node {
   transition: transform 350ms var(--ease-default);
 }
 .react-flow__node.dragging {
   transition: none;
-}
-
-/* Expanded folder node's clickable "collapse" label — the folder container
-   itself is pointer-events: none (clicks pass through to child file nodes),
-   so only this row needs its own hover affordance. */
-.graph-folder-label:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
 }
 
 /* Accent-tinted link row used inside a commit's "files changed" list. */
@@ -2125,4 +2104,290 @@ code, pre, kbd {
 @keyframes timeline-flash {
   0% { background: var(--accent-subtle); }
   100% { background: transparent; }
+}
+
+/* ────────────────────────────────────────────────────────────
+   31. ARCHITECTURE REBUILD (treemap overview + focus canvas)
+   ──────────────────────────────────────────────────────────── */
+/* Three-region layout: treemap (always visible) | canvas column (toolbar +
+   focus canvas) | inspector (fixed-width column on wide viewports, an
+   overlay drawer below the tablet-landscape breakpoint — see
+   .architecture-inspector-column / .architecture-inspector-overlay). */
+.architecture-layout {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.treemap-panel {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-default);
+  background: var(--bg-panel);
+}
+
+.treemap-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.treemap-panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+.treemap-mode-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+.treemap-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--text-tertiary);
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.treemap-mode-btn:hover { color: var(--text-primary); }
+.treemap-mode-btn.active {
+  background: var(--bg-surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.treemap-canvas {
+  position: relative;
+  flex: 1;
+  margin: var(--space-3);
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+.treemap-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.treemap-cell {
+  position: absolute;
+  border: 1px solid var(--bg-panel);
+  display: flex;
+  align-items: flex-end;
+  padding: 4px 6px;
+  overflow: hidden;
+  transition: filter var(--duration-fast), outline-color var(--duration-fast);
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+}
+.treemap-cell:hover,
+.treemap-cell.hovered {
+  filter: brightness(1.15);
+}
+.treemap-cell.focused {
+  outline-color: var(--accent);
+}
+.treemap-cell-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  color: rgba(0, 0, 0, 0.82);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  pointer-events: none;
+}
+.treemap-cell-count {
+  font-size: var(--text-2xs);
+  opacity: 0.75;
+}
+
+.architecture-canvas-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+.architecture-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+.architecture-depth-stepper {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+.architecture-depth-btn {
+  min-width: 24px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-tertiary);
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.architecture-depth-btn:hover { color: var(--text-primary); }
+.architecture-depth-btn.active {
+  background: var(--bg-surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.architecture-canvas-panel {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  outline: none;
+}
+
+.architecture-canvas-status {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.architecture-focus-prompt {
+  gap: var(--space-5);
+  max-width: 360px;
+  margin: 0 auto;
+  text-align: center;
+}
+.architecture-prompt-title {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+.architecture-prompt-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  text-align: left;
+}
+.architecture-prompt-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+.architecture-prompt-shortcut:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-focus);
+}
+.architecture-prompt-shortcut-name {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.architecture-prompt-shortcut-health {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Inspector docking — a real grid column that widens/narrows instead of an
+   overlay that shifts the toolbar. Zero-width and collapsed when nothing
+   is open, so it costs nothing until it's actually needed. */
+.architecture-inspector-column {
+  width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-left: 1px solid transparent;
+  transition: width var(--duration-normal) var(--ease-default);
+}
+.architecture-inspector-column.open {
+  width: min(var(--inspector-width), 30vw);
+  border-left-color: var(--border-default);
+}
+
+.architecture-inspector-overlay {
+  position: absolute;
+  right: var(--space-4);
+  top: var(--space-4);
+  bottom: var(--space-4);
+  width: min(var(--inspector-width), calc(100vw - var(--space-10)));
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  z-index: 10;
+  animation: slide-up var(--duration-normal) var(--ease-default);
+}
+
+/* Language corner badge on a focus-canvas file node — language is now a
+   secondary signal (health owns the primary left-border color). */
+.graph-node-lang-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+/* The centered/focused file in the neighborhood gets a distinct glow ring
+   so "this is the file I'm looking at" never requires reading a label. */
+.graph-node.is-center {
+  box-shadow: 0 0 0 1px var(--accent), 0 0 16px rgba(99, 102, 241, 0.35);
+}
+
+/* The one deliberate motion moment: edges leaving a newly-selected focus
+   pulse once to draw the eye along the dependency chain, then settle back
+   to fully static — everything else in the canvas is static at rest. */
+@keyframes edge-pulse-once {
+  0% { stroke-dashoffset: 12; opacity: 0.5; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+.edge-pulse-once {
+  stroke-dasharray: 5 3;
+  animation: edge-pulse-once 420ms var(--ease-out);
+}
+
+@media (max-width: 900px) {
+  .treemap-panel { display: none; }
 }

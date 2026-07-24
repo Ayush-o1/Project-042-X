@@ -3,10 +3,8 @@ import {
   ReactFlow,
   ReactFlowProvider,
   Background,
-  MiniMap,
   useNodesState,
   useEdgesState,
-  useReactFlow,
 } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -16,337 +14,159 @@ import { useMediaQuery, BREAKPOINTS } from '../../hooks/useMediaQuery';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import type { DagreLayoutRequest, DagreLayoutResponse } from './dagreLayout.worker';
 import { FileNode } from './FileNode';
-import { FolderNode } from './FolderNode';
 import { CustomEdge } from './CustomEdge';
-import { getFolderPath } from './layoutUtils';
-import { deriveRepoRoot } from '../../lib/insightsEngine';
+import { getFolderPath, importanceTier } from './layoutUtils';
+import { ModuleTreemap } from './ModuleTreemap';
+import type { TreemapColorMode } from './ModuleTreemap';
 import { ArchitectureToolbar } from './ArchitectureToolbar';
 import type { GraphFilters } from './ArchitectureToolbar';
 import { NodeInspector } from './NodeInspector';
-import { Network, Loader2 } from 'lucide-react';
+import { Network, Loader2, ShieldAlert, Compass } from 'lucide-react';
+import type { GraphNode } from '../../types';
 
-const nodeTypes = {
-  fileNode: FileNode,
-  folderNode: FolderNode
-};
+const nodeTypes = { fileNode: FileNode };
+const edgeTypes = { custom: CustomEdge };
+const FOLDER_PREFIX = 'folder:';
+const PULSE_DURATION_MS = 420;
 
-const edgeTypes = {
-  custom: CustomEdge
-};
-
-// ─── Flow Wrapper ──────────────────────────────────────────────────────────────
-
-const FlowWrapper: React.FC<{
-  externalHighlight?: string | null;
-}> = ({ externalHighlight }) => {
-  const {
-    dependencies, files, git, insights, setActiveFile, clearGraphHighlight,
-    architectureCollapsedFolders, setArchitectureCollapsedFolders,
-    architecturePinnedNodeId, setArchitecturePinnedNodeId,
-  } = useRepositoryStore(
-      useShallow(s => ({
-        dependencies: s.dependencies,
-        files: s.files,
-        git: s.git,
-        insights: s.insights,
-        setActiveFile: s.setActiveFile,
-        clearGraphHighlight: s.clearGraphHighlight,
-        architectureCollapsedFolders: s.architectureCollapsedFolders,
-        setArchitectureCollapsedFolders: s.setArchitectureCollapsedFolders,
-        architecturePinnedNodeId: s.architecturePinnedNodeId,
-        setArchitecturePinnedNodeId: s.setArchitecturePinnedNodeId,
-      })),
-    );
-  const { setCenter } = useReactFlow();
-
-  // Below the tablet-landscape breakpoint there isn't room to dock the Node
-  // Inspector beside the toolbar, so it becomes a full-height overlay drawer
-  // instead (see the .graph-inspector-backdrop below).
-  const isCompact = useMediaQuery(`(max-width: ${BREAKPOINTS.tabletLandscape - 1}px)`);
+/** The focus canvas — a depth-limited neighborhood laid out by the dagre
+ *  worker, plus keyboard traversal and the hover/pin dependency highlight.
+ *  Rendered only once something is focused; the default (nothing focused)
+ *  state is handled entirely by the parent. */
+const FocusCanvas: React.FC<{
+  centerIds: string[];
+  filters: GraphFilters;
+  canvasSelection: string | null;
+  onOpenInspector: (id: string) => void;
+  onRecenter: (id: string) => void;
+}> = ({ centerIds, filters, canvasSelection, onOpenInspector, onRecenter }) => {
+  const { dependencies, insights } = useRepositoryStore(
+    useShallow(s => ({ dependencies: s.dependencies, insights: s.insights })),
+  );
+  const architectureDepth = useRepositoryStore(s => s.architectureDepth);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  // Click-to-pin: persists the focus/dim highlight after the mouse leaves
-  // the node, so you can actually read what you just highlighted instead of
-  // it vanishing the instant you move toward the Inspector. Hovering a
-  // *different* node still gives a temporary preview (see the highlight
-  // effect below); un-hovering reverts to whatever's pinned. The pinned id
-  // itself lives in the store (see architecturePinnedNodeId) so it survives
-  // switching tabs; selectedNode stays local (it's a full React Flow Node
-  // object, recomputed on every layout, not something worth storing globally)
-  // and is re-derived from the pinned id once nodes repopulate after a remount.
-  const pinnedNode = architecturePinnedNodeId;
-  const setPinnedNode = setArchitecturePinnedNodeId;
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  // The four toggles are durable preferences (persisted across sessions);
-  // fileTypeFilter is reset per-analysis below since a leftover '.rs' filter
-  // silently hiding every file in a newly-opened JS repo would be confusing.
-  const [filters, setFilters] = usePersistedState<GraphFilters>('graphFilters', {
-    showOrphans: true,
-    showCycles: false,
-    highlightHotspots: false,
-    highlightCycles: true,
-    fileTypeFilter: '',
-  });
+  const [rawResult, setRawResult] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
+  const [isLayouting, setIsLayouting] = useState(true);
+  const [pulsingIds, setPulsingIds] = useState<Set<string>>(new Set());
+
+  // ── Depth-limited layout, off the main thread ──────────────────────────
+  const workerRef = useRef<Worker | null>(null);
+  const requestIdRef = useRef(0);
+  const centerKey = centerIds.join(' ');
 
   useEffect(() => {
-    setFilters(f => f.fileTypeFilter ? { ...f, fileTypeFilter: '' } : f);
-  }, [dependencies, setFilters]);
-
-  // ── Folder collapse state — every folder starts collapsed on a genuinely
-  // new dataset (the single highest-leverage fix for "the graph is
-  // overwhelming": most repos have far more files than folders). Expanding
-  // is an explicit per-folder click, not persisted across analyses since the
-  // folder set is repo-specific.
-  const allFolderIds = useMemo(() => {
-    if (!dependencies) return new Set<string>();
-    const allFolders = new Set<string>();
-    for (const n of dependencies.nodes) {
-      const folder = getFolderPath(n.path);
-      if (folder) allFolders.add(folder);
-    }
-    return allFolders;
-  }, [dependencies]);
-
-  // Seeds the store's collapse set to "all collapsed" exactly once per
-  // dataset (architectureCollapsedFolders is reset to null by analyze()/
-  // loadSessionIntoStore()). Guarding on `!== null` — rather than reseeding
-  // on every `allFolderIds` identity change — is what makes this survive a
-  // tab switch: the previous local-state version reseeded on every remount
-  // because the memo it depended on was recreated fresh each time.
-  useEffect(() => {
-    if (!dependencies || architectureCollapsedFolders !== null) return;
-    setArchitectureCollapsedFolders(new Set(allFolderIds));
-  }, [dependencies, architectureCollapsedFolders, allFolderIds, setArchitectureCollapsedFolders]);
-
-  const collapsedFolders = architectureCollapsedFolders ?? allFolderIds;
-  const handleCollapseAll = useCallback(
-    () => setArchitectureCollapsedFolders(new Set(allFolderIds)),
-    [allFolderIds, setArchitectureCollapsedFolders],
-  );
-  const handleExpandAll = useCallback(
-    () => setArchitectureCollapsedFolders(new Set()),
-    [setArchitectureCollapsedFolders],
-  );
-
-  // ── O(1) lookups, built once per dataset ───────────────────────────────────
-  const fileSizeMap = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const f of files) m.set(f.path, f.size);
-    return m;
-  }, [files]);
-
-  // ── Build git data lookup maps from raw git data ───────────────────────────
-  // Git paths are repo-relative while node ids are absolute, so all maps are
-  // keyed by absolute path (joined via the repo root). Keying by basename
-  // caused every `index.ts` in the repo to share one entry.
-  const { gitCommitMap, gitAuthorsMap, gitLastModifiedMap } = useMemo(() => {
-    const commitMap = new Map<string, number>();
-    const authorsMap = new Map<string, string[]>();
-    const lastModMap = new Map<string, string>();
-    const repoRoot = deriveRepoRoot(files);
-
-    if (git && repoRoot) {
-      for (const commit of git.commits) {
-        const dateStr = commit.timestamp ? commit.timestamp.split('T')[0] : null;
-
-        for (const file of commit.filesChanged || []) {
-          if (!file) continue;
-          const absPath = `${repoRoot}/${file}`;
-
-          // Commit count
-          commitMap.set(absPath, (commitMap.get(absPath) || 0) + 1);
-
-          // Authors
-          const authors = authorsMap.get(absPath) || [];
-          if (commit.author && !authors.includes(commit.author)) {
-            authors.push(commit.author);
-            authorsMap.set(absPath, authors);
-          }
-
-          // Last modified (commits are sorted newest first)
-          if (dateStr && !lastModMap.has(absPath)) {
-            lastModMap.set(absPath, dateStr);
-          }
-        }
-      }
-    }
-    return { gitCommitMap: commitMap, gitAuthorsMap: authorsMap, gitLastModifiedMap: lastModMap };
-  }, [git, files]);
-
-  // ── Collect unique file types for filter dropdown ─────────────────────────
-  const fileTypes = useMemo(() => {
-    if (!dependencies) return [];
-    const exts = new Set<string>();
-    dependencies.nodes.forEach(n => {
-      const ext = n.path?.split('.').pop();
-      if (ext && ext !== n.path) exts.add(`.${ext}`);
-    });
-    return Array.from(exts).sort();
-  }, [dependencies]);
-
-  // ── Raw layout (recomputed only when dependencies change) ─────────────────
-  // Dagre's layout pass runs in a Web Worker instead of blocking the main
-  // thread — on repos with a few thousand files this was a noticeable
-  // freeze (see README's Performance Notes). The requestId guards against a
-  // slower, now-stale response from a previous dataset overwriting a newer
-  // one if `dependencies` changes again before the worker replies.
-  const [rawNodes, setRawNodes] = useState<Node[]>([]);
-  const [rawEdges, setRawEdges] = useState<Edge[]>([]);
-  const [isLayouting, setIsLayouting] = useState(false);
-  const layoutWorkerRef = useRef<Worker | null>(null);
-  const layoutRequestIdRef = useRef(0);
-
-  useEffect(() => {
-    if (!dependencies) {
-      setRawNodes([]);
-      setRawEdges([]);
+    if (!dependencies || centerIds.length === 0) {
+      setRawResult({ nodes: [], edges: [] });
       return;
     }
-
-    if (!layoutWorkerRef.current) {
-      layoutWorkerRef.current = new Worker(
-        new URL('./dagreLayout.worker.ts', import.meta.url),
-        { type: 'module' },
-      );
+    if (!workerRef.current) {
+      workerRef.current = new Worker(new URL('./dagreLayout.worker.ts', import.meta.url), { type: 'module' });
     }
-    const worker = layoutWorkerRef.current;
-    const requestId = ++layoutRequestIdRef.current;
+    const worker = workerRef.current;
+    const requestId = ++requestIdRef.current;
     setIsLayouting(true);
 
     const handleMessage = (e: MessageEvent<DagreLayoutResponse>) => {
-      if (e.data.requestId !== layoutRequestIdRef.current) return;
-      setRawNodes(e.data.nodes);
-      setRawEdges(e.data.edges);
+      if (e.data.requestId !== requestIdRef.current) return;
+      const { nodes: laidOut, edges: laidOutEdges } = e.data.result;
+      const xyNodes: Node[] = laidOut.map(n => {
+        const { width, height } = importanceTier(n.inDegree) === 'large'
+          ? { width: 300, height: 76 }
+          : importanceTier(n.inDegree) === 'medium'
+            ? { width: 240, height: 60 }
+            : { width: 190, height: 48 };
+        return {
+          id: n.id,
+          type: 'fileNode',
+          position: n.position,
+          style: { width, height },
+          data: {
+            label: n.label, type: n.type, path: n.path,
+            isCenter: n.isCenter, inDegree: n.inDegree, outDegree: n.outDegree,
+            importance: importanceTier(n.inDegree),
+          },
+        };
+      });
+      setRawResult({ nodes: xyNodes, edges: laidOutEdges });
       setIsLayouting(false);
+
+      // Pulse edges leaving the new center once, then settle — the one
+      // deliberate motion moment (see ArchitectureNodeCanvas's CustomEdge).
+      const centerSet = new Set(centerIds);
+      const toPulse = new Set(laidOutEdges.filter(e => centerSet.has(e.source)).map(e => e.id));
+      setPulsingIds(toPulse);
+      window.setTimeout(() => setPulsingIds(new Set()), PULSE_DURATION_MS);
     };
     worker.addEventListener('message', handleMessage);
     worker.postMessage({
-      requestId,
-      data: dependencies,
-      direction: 'LR',
-      collapsedFolders: Array.from(architectureCollapsedFolders ?? allFolderIds),
+      requestId, data: dependencies, centerIds, depth: architectureDepth,
     } satisfies DagreLayoutRequest);
-
     return () => worker.removeEventListener('message', handleMessage);
-    // Re-requests layout whenever collapse state changes too, not just on a
-    // new dataset — expanding/collapsing a folder is a real layout change
-    // (dagre needs to reserve different space), not just a style toggle.
-    // Depends on architectureCollapsedFolders (the store value) rather than
-    // the derived `collapsedFolders` so this doesn't re-fire on the one
-    // extra render the seeding effect above causes.
-  }, [dependencies, architectureCollapsedFolders, allFolderIds]);
+  }, [dependencies, centerKey, architectureDepth]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Terminate the worker only when the view itself unmounts, not on every
-  // dependency change — it's reused across layout requests. Must null out
-  // the ref after terminating: React StrictMode (enabled in main.tsx) mounts
-  // every component twice in development — mount, cleanup, mount again — and
-  // without this, the second mount would see a non-null ref pointing at an
-  // already-terminated worker, silently skip creating a new one, and post
-  // messages into the void forever (the graph would never leave "Laying out
-  // graph…" the first time the Architecture tab opens in `npm run dev`).
-  useEffect(() => () => {
-    layoutWorkerRef.current?.terminate();
-    layoutWorkerRef.current = null;
-  }, []);
+  useEffect(() => () => { workerRef.current?.terminate(); workerRef.current = null; }, []);
 
-  /**
-   * Adjacency indexes for hover highlighting, built from the worker's
-   * already-resolved edges (rawEdges) rather than the raw dependency data —
-   * that's what makes hovering a node correctly highlight a collapsed
-   * folder standing in for a hidden dependency, instead of only ever
-   * matching individual (possibly-hidden) file ids. O(V+E) to build; O(V+E)
-   * per hover traversal instead of an O(V·E) rescan.
-   */
-  const adjacency = useMemo(() => {
+  // ── Canvas-local adjacency (only edges actually rendered) for the
+  // hover/pin dependency-chain highlight — deliberately scoped to what's
+  // on screen, unlike the Inspector's fan-in/out lists which need the
+  // full graph regardless of the current depth. ─────────────────────────
+  const canvasAdjacency = useMemo(() => {
     const forward = new Map<string, { target: string; edgeId: string }[]>();
     const reverse = new Map<string, { source: string; edgeId: string }[]>();
-    for (const e of rawEdges) {
+    for (const e of rawResult.edges) {
       if (!forward.has(e.source)) forward.set(e.source, []);
       forward.get(e.source)!.push({ target: e.target, edgeId: e.id });
       if (!reverse.has(e.target)) reverse.set(e.target, []);
       reverse.get(e.target)!.push({ source: e.source, edgeId: e.id });
     }
     return { forward, reverse };
-  }, [rawEdges]);
+  }, [rawResult.edges]);
 
-  // ── Apply insight overlays + filters ─────────────────────────────────────
+  // ── Apply insight overlays + filters ────────────────────────────────────
   useEffect(() => {
-    if (rawNodes.length === 0) return;
-
     const cycleIds = insights?.cycleNodeIds || new Set<string>();
     const hotspotIds = insights?.hotspotNodeIds || new Set<string>();
     const orphanSet = new Set(insights?.orphanFiles || []);
 
-    const processedNodes = rawNodes
+    const processed = rawResult.nodes
       .filter(n => {
-        if (n.type === 'folderNode') return true;
         const path = n.data.path as string;
-
-        // File type filter
         if (filters.fileTypeFilter) {
           const ext = path?.split('.').pop();
           if (ext && `.${ext}` !== filters.fileTypeFilter) return false;
         }
-
-        // Orphan filter
         if (!filters.showOrphans && orphanSet.has(path)) return false;
-
-        // Cycles-only filter
         if (filters.showCycles && !cycleIds.has(path)) return false;
-
         return true;
       })
       .map(n => {
-        if (n.type === 'folderNode') return n;
         const path = n.data.path as string;
         const metrics = insights?.moduleMetrics.get(path);
-        const isHotspot = filters.highlightHotspots && hotspotIds.has(path);
-        const isCycle = filters.highlightCycles && cycleIds.has(path);
-
         return {
           ...n,
           data: {
             ...n.data,
-            inDegree: metrics?.fanIn ?? n.data.inDegree ?? 0,
-            outDegree: metrics?.fanOut ?? n.data.outDegree ?? 0,
-            size: fileSizeMap.get(path) ?? 0,
-            isHotspot,
-            isCycle,
+            healthScore: metrics?.healthScore,
+            isHotspot: filters.highlightHotspots && hotspotIds.has(path),
+            isCycle: filters.highlightCycles && cycleIds.has(path),
             dimmed: false,
           },
         };
       });
 
-    setNodes(processedNodes);
-    setEdges(rawEdges);
-  }, [rawNodes, rawEdges, insights, filters, fileSizeMap, setNodes, setEdges]);
+    setNodes(processed);
+    setEdges(rawResult.edges.map(e => ({ ...e, data: { ...e.data, pulse: pulsingIds.has(e.id) } })));
+  }, [rawResult, insights, filters, setNodes, setEdges, pulsingIds]);
 
-  // ── Re-open the Inspector after a remount ──────────────────────────────────
-  // architecturePinnedNodeId survives switching tabs (it lives in the store);
-  // selectedNode is local and starts null on every fresh mount. Once nodes
-  // repopulate, restore the Inspector for whatever was pinned before, instead
-  // of leaving the pin "active" with no visible panel.
+  // ── Hover/pin highlight (transitive dependency closure), scoped to the
+  // canvas's own (depth-limited) adjacency. ──────────────────────────────
+  const highlightAnchor = hoveredNode ?? canvasSelection;
   useEffect(() => {
-    if (!architecturePinnedNodeId || selectedNode) return;
-    const node = nodes.find(n => n.id === architecturePinnedNodeId);
-    if (node && node.type !== 'folderNode') setSelectedNode(node);
-  }, [architecturePinnedNodeId, nodes, selectedNode]);
-
-  // ── Hover/pin highlight (transitive dependency closure) ───────────────────
-  // Traverses the memoized adjacency index (O(V+E)) and preserves object
-  // identity for untouched nodes/edges so React.memo skips their re-render.
-  // Hovering takes precedence when active (a temporary preview); with
-  // nothing hovered it falls back to whatever's pinned via click, so the
-  // highlight survives the mouse actually leaving the node.
-  const focusNode = hoveredNode ?? pinnedNode;
-  useEffect(() => {
-    if (!focusNode) {
-      setNodes(nds => nds.map(n =>
-        n.data.dimmed === false ? n : { ...n, data: { ...n.data, dimmed: false } },
-      ));
+    if (!highlightAnchor) {
+      setNodes(nds => nds.map(n => (n.data.dimmed === false ? n : { ...n, data: { ...n.data, dimmed: false } })));
       setEdges(eds => eds.map(e => {
         const d = e.data as { isIncoming?: boolean; isOutgoing?: boolean; isDimmed?: boolean } | undefined;
         if (!d?.isIncoming && !d?.isOutgoing && !d?.isDimmed) return e;
@@ -355,11 +175,7 @@ const FlowWrapper: React.FC<{
       return;
     }
 
-    // Iterative DFS over the prebuilt adjacency lists in each direction.
-    const walk = (
-      start: string,
-      next: (id: string) => { other: string; edgeId: string }[],
-    ): { nodes: Set<string>; edges: Set<string> } => {
+    const walk = (start: string, next: (id: string) => { other: string; edgeId: string }[]) => {
       const seen = new Set<string>([start]);
       const edgeIds = new Set<string>();
       const stack = [start];
@@ -367,25 +183,19 @@ const FlowWrapper: React.FC<{
         const id = stack.pop()!;
         for (const { other, edgeId } of next(id)) {
           edgeIds.add(edgeId);
-          if (!seen.has(other)) {
-            seen.add(other);
-            stack.push(other);
-          }
+          if (!seen.has(other)) { seen.add(other); stack.push(other); }
         }
       }
       return { nodes: seen, edges: edgeIds };
     };
 
-    const downstream = walk(focusNode, id =>
-      (adjacency.forward.get(id) ?? []).map(e => ({ other: e.target, edgeId: e.edgeId })));
-    const upstream = walk(focusNode, id =>
-      (adjacency.reverse.get(id) ?? []).map(e => ({ other: e.source, edgeId: e.edgeId })));
+    const downstream = walk(highlightAnchor, id => (canvasAdjacency.forward.get(id) ?? []).map(e => ({ other: e.target, edgeId: e.edgeId })));
+    const upstream = walk(highlightAnchor, id => (canvasAdjacency.reverse.get(id) ?? []).map(e => ({ other: e.source, edgeId: e.edgeId })));
 
     setNodes(nds => nds.map(n => {
       const dimmed = !downstream.nodes.has(n.id) && !upstream.nodes.has(n.id);
       return n.data.dimmed === dimmed ? n : { ...n, data: { ...n.data, dimmed } };
     }));
-
     setEdges(eds => eds.map(e => {
       const isOutgoing = downstream.edges.has(e.id);
       const isIncoming = upstream.edges.has(e.id);
@@ -394,71 +204,260 @@ const FlowWrapper: React.FC<{
       if (d?.isIncoming === isIncoming && d?.isOutgoing === isOutgoing && d?.isDimmed === isDimmed) return e;
       return { ...e, data: { ...e.data, isIncoming, isOutgoing, isDimmed } };
     }));
-  }, [focusNode, adjacency, setNodes, setEdges]);
+  }, [highlightAnchor, canvasAdjacency, setNodes, setEdges]);
 
-  // ── External highlight (from Insights navigation) ────────────────────────
-  // Re-runs when nodes populate so navigation works even while this lazy view
-  // is still mounting; the highlight is cleared only once actually consumed.
+  const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => {
+    onRecenter(node.id);
+    onOpenInspector(node.id);
+  }, [onRecenter, onOpenInspector]);
+
+  if (isLayouting && nodes.length === 0) {
+    return (
+      <div className="architecture-canvas-status">
+        <Loader2 size={20} className="animate-spin" style={{ color: 'var(--accent)' }} />
+        <span>Laying out neighborhood…</span>
+      </div>
+    );
+  }
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onNodeClick={onNodeClick}
+      onNodeMouseEnter={(_, node) => setHoveredNode(node.id)}
+      onNodeMouseLeave={() => setHoveredNode(null)}
+      nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
+      fitView
+      fitViewOptions={{ duration: 500, padding: 0.3, maxZoom: 1.1 }}
+      attributionPosition="bottom-right"
+      minZoom={0.2}
+      maxZoom={2}
+      proOptions={{ hideAttribution: false }}
+    >
+      <Background color="rgba(255,255,255,0.04)" gap={20} size={1} />
+    </ReactFlow>
+  );
+};
+
+/** Default state — nothing focused yet. Never an empty canvas: surfaces
+ *  the highest-risk files as one-click shortcuts, computed once already by
+ *  insightsEngine (sickestModules), so opening Architecture always answers
+ *  "where should I start?" without requiring any interaction first. */
+const FocusPrompt: React.FC<{
+  shortcuts: { path: string; healthScore: number }[];
+  onSelect: (path: string) => void;
+}> = ({ shortcuts, onSelect }) => (
+  <div className="architecture-canvas-status architecture-focus-prompt">
+    <Compass size={22} style={{ opacity: 0.35 }} />
+    <p className="architecture-prompt-title">Select a file or folder to explore its dependencies.</p>
+    {shortcuts.length > 0 && (
+      <div className="architecture-prompt-shortcuts">
+        <span className="field-label" style={{ marginBottom: 'var(--space-1)' }}>
+          <ShieldAlert size={10} /> Highest-risk files
+        </span>
+        {shortcuts.map(s => (
+          <button key={s.path} type="button" className="architecture-prompt-shortcut" onClick={() => onSelect(s.path)}>
+            <span className="architecture-prompt-shortcut-name">{s.path.split('/').pop()}</span>
+            <span className="architecture-prompt-shortcut-health" style={{ color: s.healthScore < 40 ? 'var(--color-danger)' : 'var(--color-warning)' }}>
+              {s.healthScore}
+            </span>
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+const FlowWrapper: React.FC<{ externalHighlight?: string | null }> = ({ externalHighlight }) => {
+  const {
+    dependencies, files, git, insights, setActiveFile, clearGraphHighlight,
+    architectureFocusId, setArchitectureFocusId, architectureDepth, setArchitectureDepth,
+  } = useRepositoryStore(
+    useShallow(s => ({
+      dependencies: s.dependencies,
+      files: s.files,
+      git: s.git,
+      insights: s.insights,
+      setActiveFile: s.setActiveFile,
+      clearGraphHighlight: s.clearGraphHighlight,
+      architectureFocusId: s.architectureFocusId,
+      setArchitectureFocusId: s.setArchitectureFocusId,
+      architectureDepth: s.architectureDepth,
+      setArchitectureDepth: s.setArchitectureDepth,
+    })),
+  );
+
+  const isCompact = useMediaQuery(`(max-width: ${BREAKPOINTS.tabletLandscape - 1}px)`);
+  const [filters, setFilters] = usePersistedState<GraphFilters>('graphFilters', {
+    showOrphans: true, showCycles: false, highlightHotspots: false, highlightCycles: true, fileTypeFilter: '',
+  });
+  const [treemapColorMode, setTreemapColorMode] = usePersistedState<TreemapColorMode>('architectureTreemapColorMode', 'health');
+  const [canvasSelection, setCanvasSelection] = useState<string | null>(null);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const canvasWrapperRef = useRef<HTMLDivElement>(null);
+  const cycleCursorRef = useRef<Map<string, number>>(new Map());
+
   useEffect(() => {
-    if (!externalHighlight || nodes.length === 0) return;
-    const found = nodes.some(n => n.id === externalHighlight);
-    if (found) {
-      handleSearchFocus(externalHighlight);
-      clearGraphHighlight();
-      return;
-    }
-    // Not currently visible — most likely hidden inside a collapsed folder
-    // (Insights/Code Viewer navigate by absolute file path, which folder
-    // collapse can hide entirely). Expand it; this effect re-fires once the
-    // resulting re-layout makes the node appear, and the branch above then
-    // focuses it normally.
-    const folder = getFolderPath(externalHighlight);
-    if (folder && collapsedFolders.has(folder)) {
-      const next = new Set(collapsedFolders);
-      next.delete(folder);
-      setArchitectureCollapsedFolders(next);
-    }
-  }, [externalHighlight, nodes]); // eslint-disable-line
+    setFilters(f => f.fileTypeFilter ? { ...f, fileTypeFilter: '' } : f);
+  }, [dependencies, setFilters]);
 
-  const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
-    if (node.type === 'folderNode') {
-      const folderId = node.id;
-      // Reads the live store value rather than closing over `collapsedFolders`
-      // so this callback doesn't need it in its dependency array (which would
-      // otherwise recreate onNodeClick, and therefore ReactFlow's prop, on
-      // every single folder toggle).
-      const current = useRepositoryStore.getState().architectureCollapsedFolders ?? new Set<string>();
-      const next = new Set(current);
-      if (next.has(folderId)) next.delete(folderId); else next.add(folderId);
-      setArchitectureCollapsedFolders(next);
-      return;
+  const nodeById = useMemo(() => {
+    const m = new Map<string, GraphNode>();
+    dependencies?.nodes.forEach(n => m.set(n.id, n));
+    return m;
+  }, [dependencies]);
+
+  const centerIds = useMemo(() => {
+    if (!architectureFocusId || !dependencies) return [];
+    if (architectureFocusId.startsWith(FOLDER_PREFIX)) {
+      const folder = architectureFocusId.slice(FOLDER_PREFIX.length);
+      return dependencies.nodes.filter(n => getFolderPath(n.path) === folder).map(n => n.id);
     }
-    setSelectedNode(node);
-    setPinnedNode(node.id);
-  }, [setArchitectureCollapsedFolders, setPinnedNode]);
+    return nodeById.has(architectureFocusId) ? [architectureFocusId] : [];
+  }, [architectureFocusId, dependencies, nodeById]);
 
-  const handleOpenFile = (path: string) => {
-    const fileModel = files.find(f => f.path === path);
-    if (fileModel) setActiveFile(fileModel);
-  };
+  const focusedFolder = useMemo(() => {
+    if (!architectureFocusId) return null;
+    if (architectureFocusId.startsWith(FOLDER_PREFIX)) return architectureFocusId.slice(FOLDER_PREFIX.length);
+    return getFolderPath(nodeById.get(architectureFocusId)?.path ?? '');
+  }, [architectureFocusId, nodeById]);
 
-  const handleSearchFocus = (nodeId: string) => {
-    const node = nodes.find(n => n.id === nodeId);
-    if (node) {
-      let absoluteX = node.position.x;
-      let absoluteY = node.position.y;
-      if (node.parentId) {
-        const parent = nodes.find(p => p.id === node.parentId);
-        if (parent) {
-          absoluteX += parent.position.x;
-          absoluteY += parent.position.y;
+  // Global adjacency (full graph, not depth-limited) — what the Inspector's
+  // "Imported By"/"Imports" lists and search/keyboard traversal need.
+  const globalAdjacency = useMemo(() => {
+    const forward = new Map<string, { target: string; edgeId: string }[]>();
+    const reverse = new Map<string, { source: string; edgeId: string }[]>();
+    dependencies?.edges.forEach(e => {
+      const edgeId = `${e.sourceId}->${e.targetId}`;
+      if (!forward.has(e.sourceId)) forward.set(e.sourceId, []);
+      forward.get(e.sourceId)!.push({ target: e.targetId, edgeId });
+      if (!reverse.has(e.targetId)) reverse.set(e.targetId, []);
+      reverse.get(e.targetId)!.push({ source: e.sourceId, edgeId });
+    });
+    return { forward, reverse };
+  }, [dependencies]);
+
+  const { gitCommitMap, gitAuthorsMap, gitLastModifiedMap } = useMemo(() => {
+    const commitMap = new Map<string, number>();
+    const authorsMap = new Map<string, string[]>();
+    const lastModMap = new Map<string, string>();
+    const repoRoot = files.find(f => f.relativePath && f.path.endsWith(f.relativePath))
+      ? files[0].path.slice(0, files[0].path.length - (files[0].relativePath?.length ?? 0) - 1)
+      : '';
+    if (git && repoRoot) {
+      for (const commit of git.commits) {
+        const dateStr = commit.timestamp ? commit.timestamp.split('T')[0] : null;
+        for (const file of commit.filesChanged || []) {
+          if (!file) continue;
+          const absPath = `${repoRoot}/${file}`;
+          commitMap.set(absPath, (commitMap.get(absPath) || 0) + 1);
+          const authors = authorsMap.get(absPath) || [];
+          if (commit.author && !authors.includes(commit.author)) { authors.push(commit.author); authorsMap.set(absPath, authors); }
+          if (dateStr && !lastModMap.has(absPath)) lastModMap.set(absPath, dateStr);
         }
       }
-      setCenter(absoluteX + 125, absoluteY + 40, { zoom: 1.2, duration: 800 });
-      setPinnedNode(nodeId);
-      if (node.type !== 'folderNode') setSelectedNode(node);
+    }
+    return { gitCommitMap: commitMap, gitAuthorsMap: authorsMap, gitLastModifiedMap: lastModMap };
+  }, [git, files]);
+
+  const fileTypes = useMemo(() => {
+    if (!dependencies) return [];
+    const exts = new Set<string>();
+    dependencies.nodes.forEach(n => { const ext = n.path?.split('.').pop(); if (ext && ext !== n.path) exts.add(`.${ext}`); });
+    return Array.from(exts).sort();
+  }, [dependencies]);
+
+  const riskShortcuts = useMemo(
+    () => (insights?.sickestModules ?? []).slice(0, 3).map(m => ({ path: m.id, healthScore: m.healthScore })),
+    [insights],
+  );
+
+  // Reset the keyboard selection cursor whenever the rendered neighborhood
+  // changes shape, defaulting to the (first) center node.
+  useEffect(() => { setCanvasSelection(centerIds[0] ?? null); }, [centerIds.join(' ')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleOpenFile = useCallback((path: string) => {
+    const fileModel = files.find(f => f.path === path);
+    if (fileModel) setActiveFile(fileModel);
+  }, [files, setActiveFile]);
+
+  const handleFocusFile = useCallback((id: string) => {
+    setArchitectureFocusId(id);
+    setCanvasSelection(id);
+  }, [setArchitectureFocusId]);
+
+  const handleFocusFolder = useCallback((folderPath: string) => {
+    setArchitectureFocusId(`${FOLDER_PREFIX}${folderPath}`);
+    setIsInspectorOpen(false);
+  }, [setArchitectureFocusId]);
+
+  const handleSelectAndOpen = useCallback((id: string) => {
+    handleFocusFile(id);
+    setIsInspectorOpen(true);
+  }, [handleFocusFile]);
+
+  // ── External highlight (deep-link from Insights) ──────────────────────
+  useEffect(() => {
+    if (!externalHighlight || !dependencies) return;
+    if (!nodeById.has(externalHighlight)) return;
+    handleSelectAndOpen(externalHighlight);
+    clearGraphHighlight();
+  }, [externalHighlight, dependencies, nodeById, handleSelectAndOpen, clearGraphHighlight]);
+
+  // ── Keyboard traversal ───────────────────────────────────────────────
+  const handleCanvasKeyDown = (e: React.KeyboardEvent) => {
+    if (!canvasSelection) return;
+    const cycleNext = (candidates: string[]): string | undefined => {
+      if (candidates.length === 0) return undefined;
+      const cursor = (cycleCursorRef.current.get(canvasSelection) ?? -1) + 1;
+      cycleCursorRef.current.set(canvasSelection, cursor % candidates.length);
+      return candidates[cursor % candidates.length];
+    };
+
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const next = cycleNext((globalAdjacency.forward.get(canvasSelection) ?? []).map(x => x.target));
+      if (next) setCanvasSelection(next);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const next = cycleNext((globalAdjacency.reverse.get(canvasSelection) ?? []).map(x => x.source));
+      if (next) setCanvasSelection(next);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.metaKey || e.ctrlKey) handleOpenFile(canvasSelection);
+      else setIsInspectorOpen(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      if (isInspectorOpen) setIsInspectorOpen(false);
+      else setArchitectureFocusId(null);
     }
   };
+
+  const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    const isTyping = ['INPUT', 'TEXTAREA'].includes(target.tagName);
+
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      document.getElementById('architecture-search-input')?.focus();
+      return;
+    }
+    if (isTyping) return;
+    if (e.key === '1') setArchitectureDepth(1);
+    else if (e.key === '2') setArchitectureDepth(2);
+    else if (e.key === '3') setArchitectureDepth(3);
+    else if (e.key === '4') setArchitectureDepth('all');
+    else if (e.key === 'Escape' && !isInspectorOpen) setArchitectureFocusId(null);
+  }, [setArchitectureDepth, setArchitectureFocusId, isInspectorOpen]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [handleGlobalKeyDown]);
 
   if (!dependencies) {
     return (
@@ -474,103 +473,96 @@ const FlowWrapper: React.FC<{
     );
   }
 
-  // The worker's layout pass hasn't resolved yet for this dataset — shown
-  // instead of an empty canvas, since large graphs can take a moment.
-  if (isLayouting && nodes.length === 0) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 'var(--space-4)' }}>
-        <Loader2 size={22} className="animate-spin" style={{ color: 'var(--accent)' }} />
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>Laying out graph…</span>
-      </div>
-    );
-  }
+  const inspectorTarget = isInspectorOpen ? canvasSelection : null;
 
   return (
-    <>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={onNodeClick}
-        onNodeMouseEnter={(_, node) => setHoveredNode(node.id)}
-        onNodeMouseLeave={() => setHoveredNode(null)}
-        onPaneClick={() => { setHoveredNode(null); setSelectedNode(null); setPinnedNode(null); }}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        // Bounded, not fit-all: the previous unconditional fitView would zoom
-        // out as far as needed to fit the entire graph, which on a few
-        // hundred files put every label below legible size before the user
-        // had done anything. Folder-collapse (defaulting to all-collapsed)
-        // already shrinks what's on screen; this caps how far the *initial*
-        // fit can still zoom out on top of that. Manual zoom-out (minZoom
-        // below) remains unrestricted for anyone who wants the full picture.
-        fitViewOptions={{ duration: 800, minZoom: 0.5 }}
-        attributionPosition="bottom-right"
-        minZoom={0.05}
-        maxZoom={2}
-      >
-        <Background color="rgba(255,255,255,0.04)" gap={20} size={1} />
+    <div className="architecture-layout">
+      <ModuleTreemap
+        dependencies={dependencies}
+        packageMetrics={insights?.packageMetrics ?? []}
+        colorMode={treemapColorMode}
+        onColorModeChange={setTreemapColorMode}
+        focusedFolder={focusedFolder}
+        onSelectFolder={handleFocusFolder}
+      />
+
+      <div className="architecture-canvas-column">
         <ArchitectureToolbar
-          nodes={nodes}
-          onSearch={handleSearchFocus}
+          files={dependencies.nodes}
+          onSearch={handleSelectAndOpen}
+          depth={architectureDepth}
+          onDepthChange={setArchitectureDepth}
           filters={filters}
           onFiltersChange={setFilters}
           fileTypes={fileTypes}
-          shiftLeftFor={!isCompact && selectedNode ? 'calc(var(--inspector-width) + var(--space-4))' : undefined}
-          onCollapseAll={handleCollapseAll}
-          onExpandAll={handleExpandAll}
         />
-        <MiniMap
-          nodeColor={(n) => {
-            if (n.type === 'folderNode') return 'transparent';
-            const path = n.data?.path as string;
-            if (insights?.cycleNodeIds.has(path)) return 'var(--color-danger)';
-            if (insights?.hotspotNodeIds.has(path)) return '#f59e0b';
-            if (n.data?.type === 'TypeScript') return '#3178c6';
-            if (n.data?.type === 'JavaScript') return '#f7df1e';
-            return 'var(--border-focus)';
-          }}
-          nodeStrokeColor={(n) => n.type === 'folderNode' ? 'var(--border-focus)' : 'transparent'}
-          nodeStrokeWidth={3}
-          maskColor="rgba(0, 0, 0, 0.7)"
-          style={{ backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-default)', borderRadius: '8px' }}
-        />
-      </ReactFlow>
-
-      {selectedNode && (
-        <>
-          {isCompact && (
-            <div
-              className="graph-inspector-backdrop"
-              onClick={() => setSelectedNode(null)}
-              aria-hidden="true"
+        <div
+          ref={canvasWrapperRef}
+          className="architecture-canvas-panel"
+          tabIndex={0}
+          role="application"
+          aria-label="Dependency focus canvas"
+          onKeyDown={handleCanvasKeyDown}
+        >
+          {centerIds.length === 0 ? (
+            <FocusPrompt shortcuts={riskShortcuts} onSelect={handleSelectAndOpen} />
+          ) : (
+            <FocusCanvas
+              centerIds={centerIds}
+              filters={filters}
+              canvasSelection={canvasSelection}
+              onOpenInspector={id => { setCanvasSelection(id); setIsInspectorOpen(true); }}
+              onRecenter={handleFocusFile}
             />
           )}
-          <NodeInspector
-            node={selectedNode}
-            onClose={() => { setSelectedNode(null); if (pinnedNode === selectedNode.id) setPinnedNode(null); }}
-            onOpen={handleOpenFile}
-            moduleMetrics={insights?.moduleMetrics || new Map()}
-            adjacency={adjacency}
-            gitCommitMap={gitCommitMap}
-            gitAuthorsMap={gitAuthorsMap}
-            gitLastModifiedMap={gitLastModifiedMap}
-            isPinned={pinnedNode === selectedNode.id}
-            onTogglePin={() => setPinnedNode(pinnedNode === selectedNode.id ? null : selectedNode.id)}
-          />
+        </div>
+      </div>
+
+      {!isCompact && (
+        <div className={`architecture-inspector-column${inspectorTarget ? ' open' : ''}`}>
+          {inspectorTarget && (
+            <NodeInspector
+              path={inspectorTarget}
+              sizeBytes={files.find(f => f.path === inspectorTarget)?.size ?? 0}
+              onClose={() => setIsInspectorOpen(false)}
+              onOpen={handleOpenFile}
+              moduleMetrics={insights?.moduleMetrics || new Map()}
+              adjacency={globalAdjacency}
+              gitCommitMap={gitCommitMap}
+              gitAuthorsMap={gitAuthorsMap}
+              gitLastModifiedMap={gitLastModifiedMap}
+              isPinned={canvasSelection === inspectorTarget}
+              onTogglePin={() => setCanvasSelection(inspectorTarget)}
+            />
+          )}
+        </div>
+      )}
+
+      {isCompact && inspectorTarget && (
+        <>
+          <div className="graph-inspector-backdrop" onClick={() => setIsInspectorOpen(false)} aria-hidden="true" />
+          <div className="architecture-inspector-overlay">
+            <NodeInspector
+              path={inspectorTarget}
+              sizeBytes={files.find(f => f.path === inspectorTarget)?.size ?? 0}
+              onClose={() => setIsInspectorOpen(false)}
+              onOpen={handleOpenFile}
+              moduleMetrics={insights?.moduleMetrics || new Map()}
+              adjacency={globalAdjacency}
+              gitCommitMap={gitCommitMap}
+              gitAuthorsMap={gitAuthorsMap}
+              gitLastModifiedMap={gitLastModifiedMap}
+              isPinned={canvasSelection === inspectorTarget}
+              onTogglePin={() => setCanvasSelection(inspectorTarget)}
+            />
+          </div>
         </>
       )}
-    </>
+    </div>
   );
 };
 
-// ─── Export ────────────────────────────────────────────────────────────────────
-
-export const DependencyGraphView: React.FC<{
-  externalHighlight?: string | null;
-}> = ({ externalHighlight }) => {
+export const DependencyGraphView: React.FC<{ externalHighlight?: string | null }> = ({ externalHighlight }) => {
   return (
     <div id="architecture-graph-container" style={{ height: '100%', width: '100%', backgroundColor: 'var(--bg-app)', position: 'relative' }}>
       <ReactFlowProvider>

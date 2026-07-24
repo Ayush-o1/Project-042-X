@@ -1,5 +1,4 @@
 import React from 'react';
-import type { Node } from '@xyflow/react';
 import type { ModuleMetrics } from '../../lib/insightsEngine';
 import {
   FileCode, ExternalLink, Users, Clock,
@@ -41,11 +40,15 @@ export interface GraphAdjacency {
   reverse: Map<string, { source: string; edgeId: string }[]>;
 }
 
-/** Detail panel for the currently selected/pinned file node in the
- *  Architecture graph — health score, coupling metrics, git activity, and
- *  its immediate dependency/dependent lists. */
+/** Detail panel for the currently selected/pinned file in the Architecture
+ *  focus canvas — health score, coupling metrics, git activity, and its
+ *  immediate dependency/dependent lists. Fills whatever container the
+ *  caller docks it in (a fixed-width grid column on wide viewports, a
+ *  full-height overlay drawer on narrow ones) rather than positioning
+ *  itself, so opening it never has to reflow anything else on screen. */
 export const NodeInspector = ({
-  node,
+  path,
+  sizeBytes,
   onClose,
   onOpen,
   moduleMetrics,
@@ -56,7 +59,8 @@ export const NodeInspector = ({
   isPinned,
   onTogglePin,
 }: {
-  node: Node;
+  path: string;
+  sizeBytes: number;
   onClose: () => void;
   onOpen: (path: string) => void;
   moduleMetrics: Map<string, ModuleMetrics>;
@@ -69,14 +73,12 @@ export const NodeInspector = ({
   isPinned: boolean;
   onTogglePin: () => void;
 }) => {
-  const path = node.data.path as string;
   const fileName = path?.split('/').pop() || '';
   const ext = fileName.includes('.') ? `.${fileName.split('.').pop()}` : '';
-  const inDegree = (node.data.inDegree as number) ?? 0;
-  const outDegree = (node.data.outDegree as number) ?? 0;
-  const size = (node.data.size as number) ?? 0;
 
   const metrics = moduleMetrics.get(path);
+  const inDegree = metrics?.fanIn ?? 0;
+  const outDegree = metrics?.fanOut ?? 0;
 
   // O(degree) lookups via the prebuilt adjacency index instead of scanning
   // every edge in the graph on each render.
@@ -109,24 +111,7 @@ export const NodeInspector = ({
   );
 
   return (
-    <div
-      className="graph-inspector"
-      style={{
-        position: 'absolute',
-        right: 'var(--space-5)',
-        top: 'var(--space-5)',
-        bottom: 'var(--space-5)',
-        background: 'var(--bg-panel)',
-        border: '1px solid var(--border-focus)',
-        borderRadius: 'var(--radius-2xl)',
-        boxShadow: 'var(--shadow-xl)',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 10,
-        overflow: 'hidden',
-        animation: 'slide-up var(--duration-normal) var(--ease-default)',
-      }}
-    >
+    <div className="graph-inspector">
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -239,9 +224,9 @@ export const NodeInspector = ({
               <Hash size={10} /> Size
             </div>
             <div className="stat-box-value">
-              {size > 0 ? `${(size / 1024).toFixed(1)}` : '—'}
+              {sizeBytes > 0 ? `${(sizeBytes / 1024).toFixed(1)}` : '—'}
             </div>
-            {size > 0 && <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>KB</div>}
+            {sizeBytes > 0 && <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>KB</div>}
           </div>
         </div>
 

@@ -1,212 +1,231 @@
 import dagre from 'dagre';
-import type { Node, Edge } from '@xyflow/react';
+import { MarkerType } from '@xyflow/react';
+import type { Edge } from '@xyflow/react';
 import type { DependencyGraphData } from '../../types';
 
 /**
  * Files with at least this many importers are treated as structurally
- * important and rendered larger — a lightweight, layout-time signal
- * (raw in-degree from the edge list) distinct from insightsEngine's
- * "hotspot" definition, which needs the full analysis and isn't available
- * yet when layout runs. Two tiers keep the effect legible without turning
- * the canvas into a bubble chart.
+ * important and rendered larger — a lightweight, layout-time signal (raw
+ * in-degree from the edge list) distinct from insightsEngine's "hotspot"
+ * definition. A wide size range so a genuine hub is unmistakably larger,
+ * not just marginally.
  */
 const HIGH_IMPORTANCE_IN_DEGREE = 8;
 const MEDIUM_IMPORTANCE_IN_DEGREE = 3;
 
-const FILE_NODE_SIZES = {
-  small:  { width: 220, height: 52 },
-  medium: { width: 250, height: 60 },
-  large:  { width: 270, height: 70 },
+export const FILE_NODE_SIZES = {
+  small:  { width: 190, height: 48 },
+  medium: { width: 240, height: 60 },
+  large:  { width: 300, height: 76 },
 } as const;
 
 export type ImportanceTier = keyof typeof FILE_NODE_SIZES;
 
-const importanceTier = (inDegree: number): ImportanceTier => {
+export const importanceTier = (inDegree: number): ImportanceTier => {
   if (inDegree >= HIGH_IMPORTANCE_IN_DEGREE) return 'large';
   if (inDegree >= MEDIUM_IMPORTANCE_IN_DEGREE) return 'medium';
   return 'small';
 };
 
-/** A file's immediate containing directory, used as its folder-cluster id
- *  (there is no folder-of-folder nesting in this model — every file belongs
- *  to exactly one flat folder cluster keyed by its full parent path). Root-
- *  level files have no folder. Exported so callers can compute the same
- *  folder set getDagreLayout would (e.g. to seed a default collapsed set)
- *  without duplicating the split/join logic. */
+/** A file's immediate containing directory — the same flat, one-level-deep
+ *  grouping the treemap and the folder-focus mode both key off. Root-level
+ *  files have no folder. */
 export function getFolderPath(filePath: string): string | null {
   const parts = filePath.split('/');
   return parts.length > 1 ? parts.slice(0, -1).join('/') : null;
 }
 
-export const getDagreLayout = (
-  data: DependencyGraphData,
-  direction: 'TB' | 'LR' = 'LR',
-  collapsedFolders: Set<string> = new Set(),
-) => {
-  const dagreGraph = new dagre.graphlib.Graph({ compound: true });
-  dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 50, ranksep: 100 });
+const RANK_SEP = 140;
+const NODE_SEP = 24;
 
-  // ── Structural in-degree, computed once from the raw edge list — drives
-  // both node sizing (below) and is independent of which folders are
-  // currently collapsed, so a file's visual weight doesn't jump around as
-  // the user expands/collapses unrelated folders. ─────────────────────────
+/** One "side" of a focused neighborhood — either the dependency side
+ *  (edges flowing out of the center) or the dependent side (edges flowing
+ *  into the center), laid out independently with dagre and then merged by
+ *  the caller. */
+function layoutSide(
+  centerIds: string[],
+  reachable: Map<string, number>, // id -> hop distance from nearest center (>= 1)
+  data: DependencyGraphData,
+  direction: 'forward' | 'backward',
+  inDegreeByFile: Map<string, number>,
+): { nodes: Map<string, { x: number; y: number }>; edges: Edge[] } {
+  const included = new Set(centerIds);
+  reachable.forEach((_hop, id) => included.add(id));
+
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: 'LR', nodesep: NODE_SEP, ranksep: RANK_SEP });
+
+  for (const id of included) {
+    const tier = importanceTier(inDegreeByFile.get(id) ?? 0);
+    const { width, height } = FILE_NODE_SIZES[tier];
+    g.setNode(id, { width, height });
+  }
+
+  const edges: Edge[] = [];
+  const seenEdgeIds = new Set<string>();
+  for (const e of data.edges) {
+    if (!included.has(e.sourceId) || !included.has(e.targetId)) continue;
+    const sourceIsCenter = centerIds.includes(e.sourceId);
+    const targetIsCenter = centerIds.includes(e.targetId);
+    if (sourceIsCenter && targetIsCenter) continue; // sibling center-to-center, not this side's concern
+
+    const id = `${e.sourceId}->${e.targetId}`;
+    if (!seenEdgeIds.has(id)) {
+      seenEdgeIds.add(id);
+      edges.push({
+        id, source: e.sourceId, target: e.targetId, type: 'custom', data: { count: 1 },
+        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: 'var(--border-focus)' },
+      });
+    }
+
+    // Only edges pointing away from the center belong in *this* side's
+    // ranking graph — e.g. on the dependency side, center -> dependency (or
+    // dependency -> a further dependency) counts. Feeding an edge that
+    // points back toward the center into dagre would create a ranking
+    // cycle; it's still drawn (added to `edges` above), just not used to
+    // rank.
+    const sourceHop = sourceIsCenter ? 0 : reachable.get(e.sourceId) ?? Infinity;
+    const targetHop = targetIsCenter ? 0 : reachable.get(e.targetId) ?? Infinity;
+    const pointsOutward = direction === 'forward' ? targetHop > sourceHop : sourceHop > targetHop;
+    if (pointsOutward) {
+      if (direction === 'forward') g.setEdge(e.sourceId, e.targetId);
+      else g.setEdge(e.targetId, e.sourceId); // reversed so the center still ranks first
+    }
+  }
+
+  dagre.layout(g);
+
+  const nodes = new Map<string, { x: number; y: number }>();
+  included.forEach(id => {
+    const pos = g.node(id);
+    if (pos) nodes.set(id, { x: pos.x, y: pos.y });
+  });
+  return { nodes, edges };
+}
+
+/** BFS outward from `startIds` following edges in `direction`, up to
+ *  `maxDepth` hops (Infinity for "all"). Returns hop distance per reached
+ *  id, excluding the start set itself. */
+function bfsReachable(
+  startIds: string[],
+  data: DependencyGraphData,
+  direction: 'forward' | 'backward',
+  maxDepth: number,
+): Map<string, number> {
+  const adjacency = new Map<string, string[]>();
+  for (const e of data.edges) {
+    const [from, to] = direction === 'forward' ? [e.sourceId, e.targetId] : [e.targetId, e.sourceId];
+    if (!adjacency.has(from)) adjacency.set(from, []);
+    adjacency.get(from)!.push(to);
+  }
+
+  const distance = new Map<string, number>();
+  const startSet = new Set(startIds);
+  let frontier = [...startIds];
+  let hop = 0;
+  while (frontier.length > 0 && hop < maxDepth) {
+    hop++;
+    const next: string[] = [];
+    for (const id of frontier) {
+      for (const neighbor of adjacency.get(id) ?? []) {
+        if (startSet.has(neighbor) || distance.has(neighbor)) continue;
+        distance.set(neighbor, hop);
+        next.push(neighbor);
+      }
+    }
+    frontier = next;
+  }
+  return distance;
+}
+
+export interface FocusedLayoutNode {
+  id: string;
+  path: string;
+  label: string;
+  type: string;
+  isCenter: boolean;
+  inDegree: number;
+  outDegree: number;
+  position: { x: number; y: number };
+}
+
+export interface FocusedLayoutResult {
+  nodes: FocusedLayoutNode[];
+  edges: Edge[];
+}
+
+/**
+ * Lays out a depth-limited neighborhood around one or more "center" files —
+ * a single focused file, or every file in a focused folder (siblings, one
+ * hop). Dependencies render to one side, dependents to the other, exactly
+ * as import statements read: neither direction fights the other for space,
+ * and nothing outside the requested depth is computed or rendered at all.
+ *
+ * Two independent dagre passes (dependency side, dependent side) share the
+ * center set as their common anchor; the dependent side's ranking graph
+ * uses reversed edges so the center still lands at rank 0, then its x
+ * positions are negated to place it on the opposite side. This reuses
+ * dagre's deterministic, hierarchical ranking (kept from the old
+ * whole-graph layout) instead of a hand-rolled positioning algorithm.
+ */
+export function getFocusedLayout(
+  data: DependencyGraphData,
+  centerIds: string[],
+  depth: 1 | 2 | 3 | 'all',
+): FocusedLayoutResult {
+  if (centerIds.length === 0) return { nodes: [], edges: [] };
+  const maxDepth = depth === 'all' ? Infinity : depth;
+
+  const nodeById = new Map(data.nodes.map(n => [n.id, n]));
   const inDegreeByFile = new Map<string, number>();
+  const outDegreeByFile = new Map<string, number>();
   for (const e of data.edges) {
     inDegreeByFile.set(e.targetId, (inDegreeByFile.get(e.targetId) ?? 0) + 1);
+    outDegreeByFile.set(e.sourceId, (outDegreeByFile.get(e.sourceId) ?? 0) + 1);
   }
 
-  // ── Folder membership: every file's immediate containing directory
-  // becomes exactly one folder id (there is no folder-of-folder nesting in
-  // this model — see the "creates a folder node per parent directory" test
-  // for the shape this produces). ─────────────────────────────────────────
-  const folderOfFile = new Map<string, string>();
-  const folderFileCount = new Map<string, number>();
-  data.nodes.forEach(node => {
-    const folderPath = getFolderPath(node.path);
-    if (folderPath) {
-      folderOfFile.set(node.id, folderPath);
-      folderFileCount.set(folderPath, (folderFileCount.get(folderPath) ?? 0) + 1);
-    }
+  const dependencies = bfsReachable(centerIds, data, 'forward', maxDepth);
+  const dependents = bfsReachable(centerIds, data, 'backward', maxDepth);
+
+  const depSide = layoutSide(centerIds, dependencies, data, 'forward', inDegreeByFile);
+  const depentSide = layoutSide(centerIds, dependents, data, 'backward', inDegreeByFile);
+
+  // Anchor both sides on the primary center node so they share one
+  // coordinate space; any additional center nodes (folder-focus siblings)
+  // keep their position relative to the anchor from the dependency-side
+  // pass, since that's the copy actually used below.
+  const anchorId = centerIds[0];
+  const depAnchor = depSide.nodes.get(anchorId) ?? { x: 0, y: 0 };
+  const depentAnchor = depentSide.nodes.get(anchorId) ?? { x: 0, y: 0 };
+
+  const positioned = new Map<string, { x: number; y: number }>();
+  depSide.nodes.forEach((pos, id) => {
+    positioned.set(id, { x: pos.x - depAnchor.x, y: pos.y - depAnchor.y });
+  });
+  depentSide.nodes.forEach((pos, id) => {
+    if (positioned.has(id) && centerIds.includes(id)) return; // already placed via dep side
+    positioned.set(id, { x: -(pos.x - depentAnchor.x), y: pos.y - depentAnchor.y });
   });
 
-  /** A file is hidden when its folder is collapsed; resolves to the folder
-   *  id in that case so edges/positions redirect there instead. */
-  const resolve = (id: string): string => {
-    const folder = folderOfFile.get(id);
-    return folder && collapsedFolders.has(folder) ? folder : id;
-  };
-  const isHiddenFile = (id: string): boolean => {
-    const folder = folderOfFile.get(id);
-    return Boolean(folder && collapsedFolders.has(folder));
-  };
-
-  const xyNodes: Node[] = [];
-
-  // ── Folder nodes — a collapsed folder is a regular sized "summary" node;
-  // an expanded one is still the transparent dagre-compound cluster the
-  // rest of this function already assumed. ───────────────────────────────
-  folderFileCount.forEach((fileCount, folder) => {
-    const collapsed = collapsedFolders.has(folder);
-    const label = folder.split('/').pop();
-
-    if (collapsed) {
-      const { width, height } = FILE_NODE_SIZES.medium;
-      xyNodes.push({
-        id: folder,
-        type: 'folderNode',
-        position: { x: 0, y: 0 },
-        data: { label, collapsed: true, fileCount },
-        style: { width, height, zIndex: 0 },
-      });
-      dagreGraph.setNode(folder, { width, height });
-    } else {
-      xyNodes.push({
-        id: folder,
-        type: 'folderNode',
-        position: { x: 0, y: 0 },
-        data: { label, collapsed: false, fileCount },
-        style: { zIndex: -1 },
-      });
-      dagreGraph.setNode(folder, { label: folder, clusterLabelPos: 'top' });
-    }
+  const nodes: FocusedLayoutNode[] = [];
+  positioned.forEach((position, id) => {
+    const raw = nodeById.get(id);
+    if (!raw) return;
+    nodes.push({
+      id,
+      path: raw.path,
+      label: raw.name,
+      type: raw.type,
+      isCenter: centerIds.includes(id),
+      inDegree: inDegreeByFile.get(id) ?? 0,
+      outDegree: outDegreeByFile.get(id) ?? 0,
+      position,
+    });
   });
 
-  // ── File nodes — skipped entirely while their folder is collapsed. ─────
-  data.nodes.forEach(node => {
-    if (isHiddenFile(node.id)) return;
+  const edgeById = new Map<string, Edge>();
+  for (const e of [...depSide.edges, ...depentSide.edges]) edgeById.set(e.id, e);
 
-    const parentId = folderOfFile.get(node.id);
-    const tier = importanceTier(inDegreeByFile.get(node.id) ?? 0);
-    const { width, height } = FILE_NODE_SIZES[tier];
-
-    const xyNode: Node = {
-      id: node.id,
-      type: 'fileNode',
-      position: { x: 0, y: 0 },
-      data: { label: node.name, type: node.type, path: node.path, importance: tier },
-      parentId,
-      extent: parentId ? 'parent' : undefined,
-    };
-    xyNodes.push(xyNode);
-    dagreGraph.setNode(node.id, { width, height });
-    if (parentId) {
-      dagreGraph.setParent(node.id, parentId);
-    }
-  });
-
-  // ── Edges — redirected to the folder id on whichever end is collapsed,
-  // self-loops (both ends collapse into the same folder) dropped, parallel
-  // edges produced by the redirection deduplicated (with a count so the
-  // edge can communicate "this folder has 3 imports of that one"). ───────
-  const edgeByKey = new Map<string, Edge & { data: { count: number } }>();
-  for (const edge of data.edges) {
-    const source = resolve(edge.sourceId);
-    const target = resolve(edge.targetId);
-    if (source === target) continue;
-
-    // Same id convention as before collapse existed (`source-target`), kept
-    // unchanged so anything keying off this format (e.g. hover-highlight's
-    // adjacency edgeId lookups) doesn't need to change too.
-    const key = `${source}-${target}`;
-    const existing = edgeByKey.get(key);
-    if (existing) {
-      existing.data.count += 1;
-    } else {
-      edgeByKey.set(key, {
-        id: key,
-        source,
-        target,
-        type: 'custom',
-        animated: true,
-        data: { count: 1 },
-      });
-    }
-  }
-  const xyEdges: Edge[] = Array.from(edgeByKey.values());
-
-  xyEdges.forEach((edge) => {
-    dagreGraph.setEdge(edge.source, edge.target);
-  });
-
-  dagre.layout(dagreGraph);
-
-  xyNodes.forEach((node) => {
-    const nodeWithPosition = dagreGraph.node(node.id);
-    if (!nodeWithPosition) return;
-
-    // Shift coordinate system from center to top-left for xyflow
-    if (node.type === 'folderNode') {
-      node.position = {
-        x: nodeWithPosition.x - nodeWithPosition.width / 2,
-        y: nodeWithPosition.y - nodeWithPosition.height / 2,
-      };
-      if (!node.data.collapsed) {
-        node.style = { ...node.style, width: nodeWithPosition.width, height: nodeWithPosition.height };
-      }
-    } else {
-      const { width, height } = FILE_NODE_SIZES[(node.data.importance as ImportanceTier) ?? 'medium'];
-      // FileNode renders at width/height: 100% — this is what makes the
-      // importance tier's reserved dagre space and the actually-rendered
-      // node size the same thing, so bigger-tier nodes don't overlap their
-      // neighbors or leave the reserved gap empty.
-      node.style = { ...node.style, width, height };
-      let absoluteX = nodeWithPosition.x - width / 2;
-      let absoluteY = nodeWithPosition.y - height / 2;
-
-      if (node.parentId) {
-        const parentWithPosition = dagreGraph.node(node.parentId);
-        const parentAbsoluteX = parentWithPosition.x - parentWithPosition.width / 2;
-        const parentAbsoluteY = parentWithPosition.y - parentWithPosition.height / 2;
-        node.position = {
-          x: absoluteX - parentAbsoluteX,
-          y: absoluteY - parentAbsoluteY,
-        };
-      } else {
-        node.position = { x: absoluteX, y: absoluteY };
-      }
-    }
-  });
-
-  return { nodes: xyNodes, edges: xyEdges };
-};
+  return { nodes, edges: Array.from(edgeById.values()) };
+}

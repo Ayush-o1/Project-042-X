@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getDagreLayout, getFolderPath } from '../layoutUtils';
+import { getFocusedLayout, getFolderPath, importanceTier } from '../layoutUtils';
 import type { DependencyGraphData } from '../../../types';
 
 const deps: DependencyGraphData = {
@@ -14,34 +14,70 @@ const deps: DependencyGraphData = {
   ],
 };
 
-describe('getDagreLayout', () => {
-  const { nodes, edges } = getDagreLayout(deps, 'LR');
-
-  it('creates a folder node per parent directory plus one file node per input', () => {
-    const folderNodes = nodes.filter(n => n.type === 'folderNode');
-    const fileNodes = nodes.filter(n => n.type === 'fileNode');
-    expect(fileNodes).toHaveLength(3);
-    // parents of the three files: /r/src and /r
-    expect(folderNodes.map(f => f.id).sort()).toEqual(['/r', '/r/src']);
+describe('getFocusedLayout', () => {
+  it('returns nothing for an empty center set', () => {
+    expect(getFocusedLayout(deps, [], 2)).toEqual({ nodes: [], edges: [] });
   });
 
-  it('assigns files to their folder via parentId', () => {
+  it('includes the center node itself, marked isCenter', () => {
+    const { nodes } = getFocusedLayout(deps, ['/r/src/a.ts'], 2);
+    const center = nodes.find(n => n.id === '/r/src/a.ts')!;
+    expect(center).toBeDefined();
+    expect(center.isCenter).toBe(true);
+  });
+
+  it('places dependencies and dependents on opposite sides of the center', () => {
+    const { nodes } = getFocusedLayout(deps, ['/r/src/a.ts'], 2);
+    const center = nodes.find(n => n.id === '/r/src/a.ts')!;
+    const dependency = nodes.find(n => n.id === '/r/src/b.ts')!; // a -> b
+    const dependent = nodes.find(n => n.id === '/r/main.ts')!;   // main -> a
+
+    expect(dependency.position.x).toBeGreaterThan(center.position.x);
+    expect(dependent.position.x).toBeLessThan(center.position.x);
+  });
+
+  it('respects the depth limit — a hop beyond depth is excluded', () => {
+    const chain: DependencyGraphData = {
+      nodes: [
+        { id: 'a', path: 'a.ts', name: 'a.ts', type: 'TypeScript' },
+        { id: 'b', path: 'b.ts', name: 'b.ts', type: 'TypeScript' },
+        { id: 'c', path: 'c.ts', name: 'c.ts', type: 'TypeScript' },
+      ],
+      edges: [
+        { sourceId: 'a', targetId: 'b', type: 'static' },
+        { sourceId: 'b', targetId: 'c', type: 'static' },
+      ],
+    };
+    const depthOne = getFocusedLayout(chain, ['a'], 1);
+    expect(depthOne.nodes.map(n => n.id).sort()).toEqual(['a', 'b']);
+
+    const depthAll = getFocusedLayout(chain, ['a'], 'all');
+    expect(depthAll.nodes.map(n => n.id).sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('lays out every file in a multi-node folder focus as siblings', () => {
+    const { nodes } = getFocusedLayout(deps, ['/r/src/a.ts', '/r/src/b.ts'], 1);
     const a = nodes.find(n => n.id === '/r/src/a.ts')!;
-    expect(a.parentId).toBe('/r/src');
-    expect(a.extent).toBe('parent');
+    const b = nodes.find(n => n.id === '/r/src/b.ts')!;
+    const main = nodes.find(n => n.id === '/r/main.ts')!;
+    expect(a.isCenter).toBe(true);
+    expect(b.isCenter).toBe(true);
+    expect(main.isCenter).toBe(false);
   });
 
   it('produces finite positions for every node', () => {
+    const { nodes } = getFocusedLayout(deps, ['/r/src/a.ts'], 'all');
     for (const n of nodes) {
       expect(Number.isFinite(n.position.x)).toBe(true);
       expect(Number.isFinite(n.position.y)).toBe(true);
     }
   });
 
-  it('preserves every edge with a stable id', () => {
-    expect(edges).toHaveLength(2);
-    expect(edges[0].id).toBe('/r/main.ts-/r/src/a.ts');
-    expect(edges.every(e => e.type === 'custom')).toBe(true);
+  it('carries fan-in/out counts through to each node', () => {
+    const { nodes } = getFocusedLayout(deps, ['/r/src/a.ts'], 'all');
+    const a = nodes.find(n => n.id === '/r/src/a.ts')!;
+    expect(a.inDegree).toBe(1); // main -> a
+    expect(a.outDegree).toBe(1); // a -> b
   });
 });
 
@@ -55,84 +91,10 @@ describe('getFolderPath', () => {
   });
 });
 
-describe('getDagreLayout — folder collapse', () => {
-  it('hides file nodes inside a collapsed folder, keeping one summary folder node', () => {
-    const { nodes } = getDagreLayout(deps, 'LR', new Set(['/r/src']));
-    const fileNodes = nodes.filter(n => n.type === 'fileNode');
-    const folderNodes = nodes.filter(n => n.type === 'folderNode');
-
-    // a.ts and b.ts both live in /r/src and are now hidden; main.ts (in /r,
-    // not collapsed) still renders.
-    expect(fileNodes.map(n => n.id)).toEqual(['/r/main.ts']);
-    expect(folderNodes).toHaveLength(2);
-
-    const collapsedFolder = folderNodes.find(n => n.id === '/r/src')!;
-    expect(collapsedFolder.data.collapsed).toBe(true);
-    expect(collapsedFolder.data.fileCount).toBe(2);
-
-    const expandedFolder = folderNodes.find(n => n.id === '/r')!;
-    expect(expandedFolder.data.collapsed).toBe(false);
-  });
-
-  it('redirects edges that cross into a collapsed folder to the folder id', () => {
-    const { edges } = getDagreLayout(deps, 'LR', new Set(['/r/src']));
-    // main.ts -> a.ts becomes main.ts -> /r/src (a.ts is hidden)
-    expect(edges.some(e => e.source === '/r/main.ts' && e.target === '/r/src')).toBe(true);
-  });
-
-  it('drops edges that become internal to a single collapsed folder', () => {
-    // a.ts -> b.ts are both inside /r/src — once collapsed, that edge
-    // would be a self-loop on the folder node and is dropped entirely.
-    const { edges } = getDagreLayout(deps, 'LR', new Set(['/r/src']));
-    expect(edges.some(e => e.source === '/r/src' && e.target === '/r/src')).toBe(false);
-  });
-
-  it('deduplicates parallel edges produced by redirection, tracking a count', () => {
-    // Two files inside the same collapsed folder (/r/lib) both importing the
-    // same external file both redirect their source to /r/lib — that's one
-    // real "parallel edges" case redirection can create, and it should
-    // collapse to a single edge with data.count === 2, not two parallel ones.
-    const fanOut: DependencyGraphData = {
-      nodes: [
-        { id: '/r/lib/a.ts', path: '/r/lib/a.ts', name: 'a.ts', type: 'TypeScript' },
-        { id: '/r/lib/b.ts', path: '/r/lib/b.ts', name: 'b.ts', type: 'TypeScript' },
-        { id: '/r/util.ts', path: '/r/util.ts', name: 'util.ts', type: 'TypeScript' },
-      ],
-      edges: [
-        { sourceId: '/r/lib/a.ts', targetId: '/r/util.ts', type: 'static' },
-        { sourceId: '/r/lib/b.ts', targetId: '/r/util.ts', type: 'static' },
-      ],
-    };
-    const { edges } = getDagreLayout(fanOut, 'LR', new Set(['/r/lib']));
-    const fromLib = edges.filter(e => e.source === '/r/lib');
-    expect(fromLib).toHaveLength(1);
-    expect((fromLib[0].data as { count: number }).count).toBe(2);
-  });
-
-  it('behaves identically to the uncollapsed case when collapsedFolders is empty', () => {
-    const collapsed = getDagreLayout(deps, 'LR', new Set());
-    const defaultArg = getDagreLayout(deps, 'LR');
-    expect(collapsed.nodes.map(n => n.id).sort()).toEqual(defaultArg.nodes.map(n => n.id).sort());
-    expect(collapsed.edges.map(e => e.id).sort()).toEqual(defaultArg.edges.map(e => e.id).sort());
+describe('importanceTier', () => {
+  it('tiers by in-degree thresholds', () => {
+    expect(importanceTier(0)).toBe('small');
+    expect(importanceTier(3)).toBe('medium');
+    expect(importanceTier(8)).toBe('large');
   });
 });
-
-describe('getDagreLayout — node importance sizing', () => {
-  it('reserves more space for a file with many importers than one with none', () => {
-    const nodes = Array.from({ length: 10 }, (_, i) => ({
-      id: `/r/importer${i}.ts`, path: `/r/importer${i}.ts`, name: `importer${i}.ts`, type: 'TypeScript',
-    }));
-    const hub: DependencyGraphData = {
-      nodes: [...nodes, { id: '/r/hub.ts', path: '/r/hub.ts', name: 'hub.ts', type: 'TypeScript' }],
-      edges: nodes.map(n => ({ sourceId: n.id, targetId: '/r/hub.ts', type: 'static' })),
-    };
-    const { nodes: laidOut } = getDagreLayout(hub, 'LR');
-    const hubNode = laidOut.find(n => n.id === '/r/hub.ts')!;
-    const importerNode = laidOut.find(n => n.id === '/r/importer0.ts')!;
-
-    expect(hubNode.data.importance).toBe('large');
-    expect(importerNode.data.importance).toBe('small');
-  });
-});
-
-

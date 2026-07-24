@@ -59,12 +59,13 @@ interface RepositoryState {
   // Graph view state — lifted out of the Architecture/Git Timeline components
   // so it survives switching tabs and coming back. Local component state
   // reset on every remount (React Flow's whole node/edge tree unmounts when
-  // a lazy tab becomes inactive), which meant re-collapsing every folder or
-  // losing day-grouping just from checking the Code tab and coming back.
-  /** null = not yet seeded for the current dataset (seeded to "all collapsed"
-   *  by the Architecture view on first render after a new analysis). */
-  architectureCollapsedFolders: Set<string> | null;
-  architecturePinnedNodeId: string | null;
+  // a lazy tab becomes inactive), which meant losing the current focus or
+  // day-grouping just from checking the Code tab and coming back.
+  /** File or folder id currently centered in the Architecture focus canvas;
+   *  null means the default overview state (treemap only, no canvas focus). */
+  architectureFocusId: string | null;
+  /** How many hops of dependents/dependencies to render around the focus. */
+  architectureDepth: 1 | 2 | 3 | 'all';
   gitGroupByDay: boolean;
   gitCollapsedDays: Set<string>;
 
@@ -85,8 +86,8 @@ interface RepositoryState {
   setSettingsOpen: (isOpen: boolean) => void;
   setSessionHistoryOpen: (isOpen: boolean) => void;
   setCompareModalOpen: (isOpen: boolean) => void;
-  setArchitectureCollapsedFolders: (folders: Set<string>) => void;
-  setArchitecturePinnedNodeId: (id: string | null) => void;
+  setArchitectureFocusId: (id: string | null) => void;
+  setArchitectureDepth: (depth: 1 | 2 | 3 | 'all') => void;
   setGitGroupByDay: (value: boolean) => void;
   setGitCollapsedDays: (days: Set<string>) => void;
   loadSessionIntoStore: (session: AnalysisSession) => void;
@@ -127,8 +128,8 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   isSessionHistoryOpen: false,
   isCompareModalOpen: false,
 
-  architectureCollapsedFolders: null,
-  architecturePinnedNodeId: null,
+  architectureFocusId: null,
+  architectureDepth: 2,
   gitGroupByDay: false,
   gitCollapsedDays: new Set(),
 
@@ -173,8 +174,8 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       isSessionHistoryOpen: false,
       // Graph view state is repo-specific — a loaded session is a different
       // dataset than whatever was on screen before, same as a fresh analyze().
-      architectureCollapsedFolders: null,
-      architecturePinnedNodeId: null,
+      architectureFocusId: null,
+      architectureDepth: 2,
       gitGroupByDay: false,
       gitCollapsedDays: new Set(),
     });
@@ -195,8 +196,8 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       dependencies: null,
       git: null,
       insights: null,
-      architectureCollapsedFolders: null,
-      architecturePinnedNodeId: null,
+      architectureFocusId: null,
+      architectureDepth: 2,
       gitGroupByDay: false,
       gitCollapsedDays: new Set(),
     });
@@ -338,12 +339,12 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     set({ isCompareModalOpen: isOpen });
   },
 
-  setArchitectureCollapsedFolders: (folders: Set<string>) => {
-    set({ architectureCollapsedFolders: folders });
+  setArchitectureFocusId: (id: string | null) => {
+    set({ architectureFocusId: id });
   },
 
-  setArchitecturePinnedNodeId: (id: string | null) => {
-    set({ architecturePinnedNodeId: id });
+  setArchitectureDepth: (depth: 1 | 2 | 3 | 'all') => {
+    set({ architectureDepth: depth });
   },
 
   setGitGroupByDay: (value: boolean) => {
