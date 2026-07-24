@@ -24,8 +24,8 @@ const CodeViewer = React.lazy(() =>
 const DependencyGraphView = React.lazy(() =>
   import('../graph/DependencyGraphView').then(m => ({ default: m.DependencyGraphView }))
 );
-const GitGraphView = React.lazy(() =>
-  import('../graph/GitGraphView').then(m => ({ default: m.GitGraphView }))
+const GitTimelineView = React.lazy(() =>
+  import('../timeline/GitTimelineView').then(m => ({ default: m.GitTimelineView }))
 );
 const InsightsDashboard = React.lazy(() =>
   import('../insights/InsightsDashboard').then(m => ({ default: m.InsightsDashboard }))
@@ -327,7 +327,7 @@ export const AppShell: React.FC = () => {
               <Suspense fallback={<LoadingView message="Loading module…" />}>
                 {activeTab === 'code'         && <CodeViewer />}
                 {activeTab === 'dependencies' && <DependencyGraphView externalHighlight={graphHighlightNode} />}
-                {activeTab === 'git'          && <GitGraphView />}
+                {activeTab === 'git'          && <GitTimelineView />}
                 {activeTab === 'insights'     && <InsightsDashboard />}
               </Suspense>
             )}
