@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { RepositoryIntelligenceEngine, AnalyzeOptions } from '../../core/engine/RepositoryIntelligenceEngine';
 import { UnifiedRepositoryModel } from '../../core/engine/types';
+import { GitCommitNode } from '../../core/git/types';
 import {
   AnalysisNotFoundError,
   FileAccessDeniedError,
@@ -23,6 +24,32 @@ interface AnalysisEntry {
    *  entry is evicted; kept alive until then since the Code Viewer reads
    *  file contents from disk lazily, well after analyze() has returned. */
   cloneDir?: string;
+  /**
+   * Lazily-computed, cached real (symlink-resolved) path of `model.path`.
+   * The repo root's identity is fixed for this entry's whole lifetime, so
+   * this is computed once (on the first getFileContent call) and reused,
+   * instead of re-resolving it from disk on every single file open. The
+   * per-request *target* path is still realpath'd fresh every time — only
+   * the fixed root is cached. Staleness: if the on-disk repo root were
+   * deleted and replaced by something else at the same path while this
+   * entry is still cached (a few minutes, until LRU eviction), this cached
+   * value would miss that swap. That requires local filesystem tampering
+   * with the exact path mid-analysis; the target file is still verified
+   * fresh on every request regardless, so this only narrows an already
+   * extremely unlikely race, it doesn't introduce a new one.
+   */
+  realRootPromise?: Promise<string>;
+  /**
+   * Lazily-computed, cached array form of `model.git.commits` (a Map).
+   * Staleness: none beyond what already exists — `model.git.commits` is a
+   * frozen snapshot taken once during analyze() and never mutated
+   * afterward for this entry (confirmed in GitIntelligenceEngine /
+   * RepositoryIntelligenceEngine: nothing re-runs `git log` or writes back
+   * into an existing entry's model). The old uncached code re-flattened
+   * this same frozen snapshot on every call; caching it changes nothing
+   * about freshness, only avoids repeating the flatten.
+   */
+  commitsArray?: GitCommitNode[];
 }
 
 /** Number of completed analyses kept in memory before evicting the oldest. */
@@ -93,16 +120,34 @@ export class RepositoryService {
     return this.getEntry(analysisId).model;
   }
 
-  public getFiles(analysisId?: string) {
-    return this.getEntry(analysisId).model.files;
+  /**
+   * Returns the scanned file list, optionally as a page. `offset`/`limit`
+   * are optional — omitting both returns every file, exactly as before, so
+   * any consumer that doesn't opt into paging keeps its existing behavior.
+   */
+  public getFiles(analysisId?: string, offset = 0, limit?: number) {
+    const all = this.getEntry(analysisId).model.files;
+    const files = limit !== undefined ? all.slice(offset, offset + limit) : all.slice(offset);
+    return { files, totalFiles: all.length };
   }
 
-  public getDependencies(analysisId?: string) {
+  /**
+   * Returns the dependency graph, optionally as a page of nodes. Edges are
+   * scoped to whichever nodes are in the returned page (each node's own
+   * outgoing edges, via DependencyGraph's existing per-source storage) —
+   * every edge's source is always some node in the graph, so fetching every
+   * page and concatenating nodes/edges reconstructs the exact same full
+   * graph as the old unpaginated response. A page is never "missing" edges
+   * that belong to it; an edge may just reference a targetId whose own
+   * node hasn't arrived in an earlier/later page yet, same as any
+   * paginated graph API.
+   */
+  public getDependencies(analysisId?: string, offset = 0, limit?: number) {
     const model = this.getEntry(analysisId).model;
-    return {
-      nodes: model.dependencies.getAllNodes(),
-      edges: model.dependencies.getAllEdges(),
-    };
+    const allNodes = model.dependencies.getAllNodes();
+    const nodes = limit !== undefined ? allNodes.slice(offset, offset + limit) : allNodes.slice(offset);
+    const edges = nodes.flatMap(n => model.dependencies.getOutgoingEdges(n.id));
+    return { nodes, edges, totalNodes: allNodes.length };
   }
 
   /**
@@ -110,11 +155,14 @@ export class RepositoryService {
    * Commits are in `git log` order (newest first).
    */
   public getGitData(analysisId?: string, offset = 0, limit?: number) {
-    const model = this.getEntry(analysisId).model;
-    const all = Array.from(model.git.commits.values());
+    const entry = this.getEntry(analysisId);
+    if (!entry.commitsArray) {
+      entry.commitsArray = Array.from(entry.model.git.commits.values());
+    }
+    const all = entry.commitsArray;
     const commits = limit !== undefined ? all.slice(offset, offset + limit) : all.slice(offset);
     return {
-      head: model.git.head,
+      head: entry.model.git.head,
       commits,
       totalCommits: all.length,
     };
@@ -139,9 +187,24 @@ export class RepositoryService {
     // 2. Defense in depth: verify the physical file actually lives inside the
     //    repository root, following symlinks on both sides (macOS tmp dirs are
     //    symlinked, e.g. /var -> /private/var, so both must be realpath'd).
+    //    The root's realpath is fixed for this entry's lifetime and cached
+    //    (see AnalysisEntry.realRootPromise); the target's realpath still
+    //    varies per call and is always resolved fresh — never cached.
     let realTarget: string;
     try {
-      const realRoot = await fs.realpath(repoPath);
+      if (!entry.realRootPromise) {
+        entry.realRootPromise = fs.realpath(repoPath);
+      }
+      let realRoot: string;
+      try {
+        realRoot = await entry.realRootPromise;
+      } catch (rootErr) {
+        // Don't cache a rejection — a transient failure here shouldn't
+        // permanently poison every future file open for this analysis;
+        // let the next call retry fs.realpath(repoPath) fresh.
+        entry.realRootPromise = undefined;
+        throw rootErr;
+      }
       realTarget = await fs.realpath(resolvedPath);
       if (realTarget !== realRoot && !realTarget.startsWith(realRoot + path.sep)) {
         throw new FileAccessDeniedError();

@@ -272,7 +272,7 @@ const FocusPrompt: React.FC<{
   </div>
 );
 
-const FlowWrapper: React.FC<{ externalHighlight?: string | null }> = ({ externalHighlight }) => {
+const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boolean }> = ({ externalHighlight, isActive }) => {
   const {
     dependencies, files, git, insights, setActiveFile, clearGraphHighlight,
     architectureFocusId, setArchitectureFocusId, architectureDepth, setArchitectureDepth,
@@ -455,9 +455,14 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null }> = ({ external
   }, [setArchitectureDepth, setArchitectureFocusId, isInspectorOpen]);
 
   useEffect(() => {
+    // Guarded by isActive: this view now stays mounted (hidden, not
+    // unmounted) when another tab is selected, so without this check the
+    // listener would keep intercepting global keystrokes meant for whatever
+    // tab is actually visible.
+    if (!isActive) return;
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [handleGlobalKeyDown]);
+  }, [handleGlobalKeyDown, isActive]);
 
   if (!dependencies) {
     return (
@@ -562,11 +567,11 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null }> = ({ external
   );
 };
 
-export const DependencyGraphView: React.FC<{ externalHighlight?: string | null }> = ({ externalHighlight }) => {
+export const DependencyGraphView: React.FC<{ externalHighlight?: string | null; isActive?: boolean }> = ({ externalHighlight, isActive = true }) => {
   return (
     <div id="architecture-graph-container" style={{ height: '100%', width: '100%', backgroundColor: 'var(--bg-app)', position: 'relative' }}>
       <ReactFlowProvider>
-        <FlowWrapper externalHighlight={externalHighlight} />
+        <FlowWrapper externalHighlight={externalHighlight} isActive={isActive} />
       </ReactFlowProvider>
     </div>
   );

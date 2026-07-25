@@ -68,7 +68,12 @@ describe('API Routes Integration', () => {
     
     const filesRes = await request(app).get('/api/v1/repository/files');
     expect(filesRes.status).toBe(200);
-    expect(filesRes.body.data.length).toBe(1); // main.ts
+    expect(filesRes.body.data.files.length).toBe(1); // main.ts
+    expect(filesRes.body.data.totalFiles).toBe(1);
+
+    const depsRes = await request(app).get('/api/v1/repository/dependencies');
+    expect(depsRes.status).toBe(200);
+    expect(depsRes.body.data.totalNodes).toBe(1);
 
     // Test file reading
     const validFileRes = await request(app)
@@ -125,7 +130,7 @@ describe('API Routes Integration', () => {
       .get('/api/v1/repository/files')
       .query({ analysisId });
     expect(filesRes.status).toBe(200);
-    expect(filesRes.body.data.length).toBe(1);
+    expect(filesRes.body.data.files.length).toBe(1);
 
     // Unknown id → 404, never another analysis's data
     const missingRes = await request(app)
@@ -160,6 +165,38 @@ describe('API Routes Integration', () => {
       .query({ analysisId, offset: 1, limit: 1 });
     expect(page2.body.data.commits.length).toBe(1);
     expect(page2.body.data.commits[0].message).toBe('Initial API test commit');
+  });
+
+  it('should paginate /files and /dependencies with offset/limit and report totals', async () => {
+    await fs.writeFile(path.join(tempDir, 'second.ts'), 'export const x = 1;');
+    const git = simpleGit(tempDir);
+    await git.add('.');
+    await git.commit('Second commit');
+
+    const analyzeRes = await request(app)
+      .post('/api/v1/repository/analyze')
+      .send({ path: tempDir });
+    const { analysisId } = analyzeRes.body.data;
+
+    const filesPage1 = await request(app)
+      .get('/api/v1/repository/files')
+      .query({ analysisId, offset: 0, limit: 1 });
+    expect(filesPage1.status).toBe(200);
+    expect(filesPage1.body.data.files.length).toBe(1);
+    expect(filesPage1.body.data.totalFiles).toBe(2);
+
+    const filesPage2 = await request(app)
+      .get('/api/v1/repository/files')
+      .query({ analysisId, offset: 1, limit: 1 });
+    expect(filesPage2.body.data.files.length).toBe(1);
+    expect(filesPage2.body.data.files[0].name).not.toBe(filesPage1.body.data.files[0].name);
+
+    const depsPage1 = await request(app)
+      .get('/api/v1/repository/dependencies')
+      .query({ analysisId, offset: 0, limit: 1 });
+    expect(depsPage1.status).toBe(200);
+    expect(depsPage1.body.data.nodes.length).toBe(1);
+    expect(depsPage1.body.data.totalNodes).toBe(2);
   });
 
   it('should honor the maxCommits analysis option', async () => {

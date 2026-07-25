@@ -57,9 +57,18 @@ export class DependencyExtractionEngine {
         return;
       }
 
-      // Resolve edges
-      for (const imp of parsedDeps.imports) {
-        const resolvedPath = await this.pathResolver.resolve(file.path, imp.specifier);
+      // Resolve every import in this file concurrently — each resolve()
+      // call is independent filesystem I/O, so there's no reason to await
+      // them one at a time. addEdge() itself still runs in a plain loop
+      // afterward, in original import order, so edge insertion order and
+      // the outer p-limit(concurrencyLimit) file-level bound are unchanged.
+      const resolutions = await Promise.all(
+        parsedDeps.imports.map(async imp => ({
+          imp,
+          resolvedPath: await this.pathResolver.resolve(file.path, imp.specifier),
+        })),
+      );
+      for (const { imp, resolvedPath } of resolutions) {
         if (resolvedPath) {
           // It's an internal absolute path we resolved
           graph.addEdge({

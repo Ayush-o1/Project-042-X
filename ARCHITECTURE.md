@@ -36,7 +36,8 @@ Extracts version control metadata using a `simple-git` wrapper.
 - Each `POST /analyze` returns an `analysisId`; every other endpoint accepts it as a query parameter and resolves strictly to that analysis, so two analyses running close together (or in different browser tabs) can never serve each other's data.
 - Requests without an id fall back to the most recently completed analysis.
 - The three most recent analyses are kept; older ones are evicted to bound memory.
-- `GET /repository/git` additionally accepts `offset`/`limit` for paged history reads.
+- `GET /repository/git`, `GET /repository/files`, and `GET /repository/dependencies` all accept `offset`/`limit` for paged reads (omitting both still returns everything, unchanged, for any caller that doesn't opt in). The frontend always pages through these in fixed-size chunks rather than requesting one unbounded payload. `dependencies` pages by node; each page's edges are that page's nodes' own outgoing edges, so concatenating every page reconstructs the exact same graph as an unpaginated fetch.
+- Per-analysis results that are expensive to rebuild and don't change for the lifetime of the entry are cached on it: the repo root's resolved real path (used by every Code Viewer file-content read's path-traversal check) and the git commit history flattened to an array (used by every `/git` read).
 
 ---
 
@@ -62,15 +63,20 @@ A purely mathematical module that calculates derived metrics from the dependency
 - **Fan-In / Hotspots**: Calculates the in-degree of all nodes to flag over-coupled files.
 - **Git Activity**: Aggregates file modification frequencies to determine the most active modules.
 
-### 4. Graph Engine (React Flow + Dagre)
-Separates topological data from spatial data.
-- The backend provides nodes and edges without X/Y coordinates.
-- The frontend uses `dagre` to execute a directed graph layout algorithm (Top-to-Bottom for Git, Left-to-Right for Dependencies). The Architecture graph's layout pass runs in a dedicated Web Worker so it never blocks the main thread; the Git Timeline's layout stays synchronous since it's already capped at 500 rendered nodes.
+### 4. Graph Engine (Architecture: React Flow + Dagre; Git Timeline: virtualized list)
+Architecture and Git Timeline solve different rendering problems and use different techniques — neither is a whole-graph dagre layout anymore.
+
+**Architecture** — a treemap overview plus a focused-neighborhood canvas, not a single whole-repository graph:
+- `ModuleTreemap` renders one cell per top-level folder using a squarified treemap algorithm (`treemapLayout.ts`), colorable by health score, hotspot (fan-in), or dominant file type.
+- Selecting a file or folder computes a depth-limited neighborhood (`getFocusedLayout` in `layoutUtils.ts`): a bidirectional BFS out to a configurable hop depth (1 / 2 / 3 / all), laid out with two independent `dagre` passes (dependencies to one side, dependents to the other, Left-to-Right) sharing the selected node(s) as a common anchor. Nothing outside the requested depth is computed or rendered.
+- This layout pass runs in a dedicated Web Worker (`dagreLayout.worker.ts`) so it never blocks the main thread, and the canvas stays mounted (hidden, not unmounted) when switching to another tab and back, so returning to Architecture reuses the existing layout instead of recomputing it against unchanged input.
 - Coordinates are passed to `@xyflow/react` (React Flow), which renders nodes as DOM elements and edges as SVG, and handles zooming, panning, and viewport virtualization.
 - Forward/reverse adjacency indexes are built once per loaded graph; hover highlighting walks these indexes (O(V+E) per hover) instead of rescanning the edge list at every traversal step.
-- The Git Timeline caps rendered commits (most recent 500) independently of how many were analyzed, since dagre-laying-out and mounting tens of thousands of commit nodes is unusable regardless of correctness.
-- Both graphs support collapsing groups of nodes into a single summary node — folders in the Architecture graph (collapsed by default, with Collapse All / Expand All controls), commits by calendar day in the Git Timeline (opt-in). Both reuse the same technique: hidden member nodes redirect their edges to the summary node's id, parallel redirected edges are deduplicated with a count, and edges that become internal to one summary node are dropped.
-- Collapse state, the pinned/selected node, and day-grouping live in the Zustand store rather than component state, so they survive switching tabs and coming back — React Flow fully unmounts an inactive lazy-loaded tab, which previously reset all of this on every visit.
+
+**Git Timeline** — a virtualized list, not a graph layout, since mounting tens of thousands of commit nodes as DOM/SVG elements is unusable regardless of layout correctness:
+- `assignCommitLanes` (`commitLanes.ts`) assigns each commit a lane number from its parent/child topology (the same technique `git log --graph` uses) — this is the only "layout" step, and it's a plain synchronous pass over the commit list, not dagre.
+- Rendering uses `react-virtuoso`'s `GroupedVirtuoso` (grouped by calendar day) to virtualize the row list — only on-screen rows exist as DOM nodes, with no cap on how many commits can be analyzed or scrolled through.
+- Commits can be grouped/collapsed by calendar day (opt-in); the pinned/selected commit and day-grouping state live in the Zustand store so they survive switching tabs and coming back.
 
 ### 5. Export & Session Engine
 Provides zero-configuration persistence.
@@ -85,11 +91,11 @@ Provides zero-configuration persistence.
 1. **Initialization**: User submits an absolute filesystem path in the UI.
 2. **Analysis Request**: Frontend issues a `POST /api/v1/repository/analyze` request.
 3. **Backend Orchestration**: `RepositoryIntelligenceEngine` runs the Scanner→AST pipeline and the Git engine as concurrent async operations, then merges the results into a `UnifiedRepositoryModel` held by `RepositoryService` under a fresh `analysisId`.
-4. **Staged Transfer**: The frontend fetches files, dependencies, and git data via three sequential `GET` requests (each carrying `analysisId`) so the UI can populate incrementally.
+4. **Staged Transfer**: The frontend fetches files, dependencies, and git data via three sequential resource fetches (each carrying `analysisId`), so the UI can populate incrementally. Each of the three pages through the underlying endpoint in fixed-size chunks (`offset`/`limit`) rather than one unbounded request, then assembles the full result before handing it to the store.
 5. **Normalization**: `src/api/client.ts` converts backend wire shapes into frontend domain models (e.g., serialized dates to timestamp strings) before the data ever reaches the store.
-6. **Metric Computation**: `computeInsights` runs once, calculating Tarjan's SCC, memoized-DFS depth, coupling, and health metrics; the result is cached in the store.
-7. **Layout Calculation**: `getDagreLayout` computes X/Y coordinates for the graph nodes, running inside a Web Worker for the Architecture graph so layout never blocks the main thread; an adjacency index is built alongside for O(V+E) hover highlighting.
-8. **Rendering**: React Flow renders the nodes (DOM) and edges (SVG), virtualizing offscreen elements.
+6. **Metric Computation**: `computeInsights` (Tarjan's SCC, memoized-DFS depth, coupling, and health metrics) runs once per completed analysis, offloaded to a dedicated Web Worker so this doesn't block the main thread right as results are about to render; the result is cached in the store.
+7. **Layout Calculation**: when a file or folder is focused in Architecture, `getFocusedLayout` computes X/Y coordinates for that depth-limited neighborhood only, running inside a Web Worker so layout never blocks the main thread; an adjacency index is built alongside for O(V+E) hover highlighting. The Git Timeline doesn't have a layout step — commit lanes are assigned synchronously and rows are virtualized (see Graph Engine above).
+8. **Rendering**: React Flow renders the Architecture canvas's nodes (DOM) and edges (SVG); the Git Timeline renders as a `react-virtuoso`-virtualized row list. Both virtualize offscreen elements.
 
 ---
 
@@ -120,6 +126,7 @@ Project 042-X/
 │   │   │   ├── graph/            # React Flow and Dagre implementations
 │   │   │   ├── insights/         # Dashboard and metric KPI components
 │   │   │   ├── layout/           # AppShell, Sidebar (file explorer), Header, Modals
+│   │   │   ├── timeline/         # Git Timeline: lane assignment and the virtualized row list
 │   │   │   ├── ui/               # Shared primitives (Toast)
 │   │   │   └── viewer/           # Code Viewer implementation
 │   │   ├── hooks/                # useMediaQuery, useFocusTrap, useDelayedFocus, usePersistedState, useToast

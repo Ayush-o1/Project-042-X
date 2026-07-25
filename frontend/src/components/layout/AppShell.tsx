@@ -106,6 +106,17 @@ export const AppShell: React.FC = () => {
     else setSidebarCollapsed(v => !v);
   };
 
+  // The Architecture view (dagre-laid-out focus canvas) is expensive to lay
+  // out, and the same neighborhood is re-requested every time this tab
+  // becomes active again. Once visited, it stays mounted (hidden via CSS
+  // instead of unmounted) so switching tabs and back reuses the existing
+  // canvas/worker state instead of paying a full re-layout for identical
+  // input. Other tabs keep their original mount-per-visit behavior.
+  const [hasVisitedGraph, setHasVisitedGraph] = useState(false);
+  useEffect(() => {
+    if (activeTab === 'dependencies') setHasVisitedGraph(true);
+  }, [activeTab]);
+
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Cmd+K / Ctrl+K — Command Palette
@@ -325,10 +336,14 @@ export const AppShell: React.FC = () => {
             {/* Main views */}
             {!isAnalyzing && !error && metadata && (
               <Suspense fallback={<LoadingView message="Loading module…" />}>
-                {activeTab === 'code'         && <CodeViewer />}
-                {activeTab === 'dependencies' && <DependencyGraphView externalHighlight={graphHighlightNode} />}
-                {activeTab === 'git'          && <GitTimelineView />}
-                {activeTab === 'insights'     && <InsightsDashboard />}
+                {activeTab === 'code' && <CodeViewer />}
+                {hasVisitedGraph && (
+                  <div style={{ height: '100%', width: '100%', display: activeTab === 'dependencies' ? undefined : 'none' }}>
+                    <DependencyGraphView externalHighlight={graphHighlightNode} isActive={activeTab === 'dependencies'} />
+                  </div>
+                )}
+                {activeTab === 'git'      && <GitTimelineView />}
+                {activeTab === 'insights' && <InsightsDashboard />}
               </Suspense>
             )}
           </div>

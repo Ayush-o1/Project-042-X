@@ -7,7 +7,9 @@ import type {
   ApiEnvelope,
   WireAnalyzeResult,
   WireDependencies,
+  WireDependenciesPage,
   WireFile,
+  WireFilesPage,
   WireGitData,
 } from './contracts';
 import type {
@@ -135,17 +137,52 @@ export async function analyzeRepository(
   };
 }
 
+// Page sizes for the two paginated list endpoints below. The backend still
+// returns everything when offset/limit are omitted (any other consumer's
+// existing behavior is unaffected); this app always pages through in
+// fixed-size chunks instead of requesting one unbounded payload, so a large
+// repo is fetched (and JSON-parsed) as several smaller responses rather than
+// one very large one. Callers (the store) still only see the fully
+// assembled FileModel[]/DependencyGraphData once every page has arrived —
+// this reduces per-request payload size, it does not yet let any view
+// render before the full dataset is in.
+const FILES_PAGE_SIZE = 2000;
+const DEPENDENCIES_PAGE_SIZE = 2000;
+
 export async function fetchFiles(analysisId?: string, signal?: AbortSignal): Promise<FileModel[]> {
-  const data = await request<WireFile[]>(withAnalysisId('/repository/files', analysisId), { signal });
-  return data.map(toFileModel);
+  const files: FileModel[] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await request<WireFilesPage>(
+      withAnalysisId(`/repository/files?offset=${offset}&limit=${FILES_PAGE_SIZE}`, analysisId),
+      { signal },
+    );
+    files.push(...page.files.map(toFileModel));
+    offset += page.files.length;
+    if (page.files.length === 0 || offset >= page.totalFiles) break;
+  }
+  return files;
 }
 
 export async function fetchDependencies(
   analysisId?: string,
   signal?: AbortSignal,
 ): Promise<DependencyGraphData> {
-  const data = await request<WireDependencies>(withAnalysisId('/repository/dependencies', analysisId), { signal });
-  return toDependencyGraph(data);
+  const nodes: DependencyGraphData['nodes'] = [];
+  const edges: DependencyGraphData['edges'] = [];
+  let offset = 0;
+  for (;;) {
+    const page = await request<WireDependenciesPage>(
+      withAnalysisId(`/repository/dependencies?offset=${offset}&limit=${DEPENDENCIES_PAGE_SIZE}`, analysisId),
+      { signal },
+    );
+    const converted = toDependencyGraph(page);
+    nodes.push(...converted.nodes);
+    edges.push(...converted.edges);
+    offset += page.nodes.length;
+    if (page.nodes.length === 0 || offset >= page.totalNodes) break;
+  }
+  return { nodes, edges };
 }
 
 export async function fetchGit(analysisId?: string, signal?: AbortSignal): Promise<GitGraphData> {

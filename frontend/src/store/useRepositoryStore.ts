@@ -8,10 +8,41 @@ import {
 } from '../api/client';
 import { computeInsights } from '../lib/insightsEngine';
 import type { InsightsResult } from '../lib/insightsEngine';
+import type { InsightsWorkerRequest, InsightsWorkerResponse } from '../lib/insightsEngine.worker';
 import type { AnalysisSession } from '../lib/sessionEngine';
 import type { FileModel, RepositoryMetadata, DependencyGraphData, GitGraphData } from '../types';
 
 export type ActiveTab = 'code' | 'dependencies' | 'git' | 'insights';
+
+/** Runs computeInsights in a dedicated worker so the (potentially expensive,
+ *  synchronous) Tarjan's SCC / DFS / graph-pass computation doesn't block the
+ *  main thread right as analysis results are about to render. One-shot: the
+ *  worker is spun up per call and terminated once it responds, mirroring how
+ *  the dagre layout worker is used for the focus canvas. */
+function computeInsightsAsync(
+  files: FileModel[],
+  dependencies: DependencyGraphData | null,
+  git: GitGraphData | null,
+): Promise<InsightsResult> {
+  // Worker is unavailable in some environments (the Vitest/jsdom test
+  // environment, most notably) — fall back to the direct synchronous call
+  // rather than assuming a browser Worker context everywhere.
+  if (typeof Worker === 'undefined') {
+    return Promise.resolve(computeInsights(files, dependencies, git));
+  }
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../lib/insightsEngine.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent<InsightsWorkerResponse>) => {
+      resolve(e.data.result);
+      worker.terminate();
+    };
+    worker.onerror = (err) => {
+      reject(new Error(err.message || 'Failed to compute insights.'));
+      worker.terminate();
+    };
+    worker.postMessage({ requestId: 0, files, dependencies, git } satisfies InsightsWorkerRequest);
+  });
+}
 
 interface RepositoryState {
   isAnalyzing: boolean;
@@ -217,7 +248,9 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       const git = await fetchGit(analysisId, signal);
 
       // 5. Compute derived metrics exactly once for the completed dataset.
-      const insights = computeInsights(files, dependencies, git);
+      // Off the main thread — Tarjan's SCC + DFS + several full graph passes
+      // would otherwise block the UI right as results are about to render.
+      const insights = await computeInsightsAsync(files, dependencies, git);
       set({ git, insights, analysisProgress: 100, isFetchingGit: false });
 
     } catch (err) {

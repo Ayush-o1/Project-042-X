@@ -66,6 +66,24 @@ export interface WireDependencies {
   edges: WireGraphEdge[];
 }
 
+/** GET /repository/files response payload — paginated via offset/limit. */
+export interface WireFilesPage {
+  files: WireFile[];
+  /** Total number of files in the analysis (may exceed files.length when paginated). */
+  totalFiles: number;
+}
+
+/**
+ * GET /repository/dependencies response payload — paginated by node via
+ * offset/limit. edges is scoped to the returned nodes' own outgoing edges
+ * (see repository.service.ts's getDependencies); fetching every page and
+ * concatenating nodes/edges reconstructs the full graph.
+ */
+export interface WireDependenciesPage extends WireDependencies {
+  /** Total number of nodes in the analysis (may exceed nodes.length when paginated). */
+  totalNodes: number;
+}
+
 /** backend/src/core/git/types.ts → GitCommitNode; Date serializes to ISO string */
 export interface WireCommit {
   hash: string;

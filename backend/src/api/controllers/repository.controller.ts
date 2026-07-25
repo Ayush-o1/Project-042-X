@@ -10,6 +10,16 @@ const analysisIdOf = (req: Request): string | undefined =>
     ? req.query.analysisId
     : undefined;
 
+/** Reads the optional offset/limit pagination query params. */
+const pageParamsOf = (req: Request): { offset: number; limit: number | undefined } => {
+  const offset = req.query.offset !== undefined ? Number(req.query.offset) : 0;
+  const limit = req.query.limit !== undefined ? Number(req.query.limit) : undefined;
+  return {
+    offset: Number.isFinite(offset) && offset >= 0 ? offset : 0,
+    limit: limit !== undefined && Number.isFinite(limit) && limit >= 0 ? limit : undefined,
+  };
+};
+
 export class RepositoryController {
 
   public static async analyze(req: Request, res: Response, next: NextFunction) {
@@ -46,7 +56,8 @@ export class RepositoryController {
 
   public static getFiles(req: Request, res: Response, next: NextFunction) {
     try {
-      const files = repositoryService.getFiles(analysisIdOf(req));
+      const { offset, limit } = pageParamsOf(req);
+      const files = repositoryService.getFiles(analysisIdOf(req), offset, limit);
       res.status(200).json({ success: true, data: files });
     } catch (error) {
       next(error);
@@ -55,7 +66,8 @@ export class RepositoryController {
 
   public static getDependencies(req: Request, res: Response, next: NextFunction) {
     try {
-      const dependencies = repositoryService.getDependencies(analysisIdOf(req));
+      const { offset, limit } = pageParamsOf(req);
+      const dependencies = repositoryService.getDependencies(analysisIdOf(req), offset, limit);
       res.status(200).json({ success: true, data: dependencies });
     } catch (error) {
       next(error);
@@ -64,13 +76,8 @@ export class RepositoryController {
 
   public static getGitData(req: Request, res: Response, next: NextFunction) {
     try {
-      const offset = req.query.offset !== undefined ? Number(req.query.offset) : 0;
-      const limit = req.query.limit !== undefined ? Number(req.query.limit) : undefined;
-      const git = repositoryService.getGitData(
-        analysisIdOf(req),
-        Number.isFinite(offset) && offset >= 0 ? offset : 0,
-        limit !== undefined && Number.isFinite(limit) && limit >= 0 ? limit : undefined,
-      );
+      const { offset, limit } = pageParamsOf(req);
+      const git = repositoryService.getGitData(analysisIdOf(req), offset, limit);
       res.status(200).json({ success: true, data: git });
     } catch (error) {
       next(error);
