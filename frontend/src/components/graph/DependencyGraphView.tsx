@@ -49,6 +49,19 @@ const FocusCanvas: React.FC<{
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  // Coalesces rapid mouseenter/mouseleave churn (e.g. the cursor sweeping
+  // across a dense cluster) into a single highlight recompute once the
+  // cursor actually settles, instead of re-walking the adjacency graph and
+  // remapping every node/edge on every single enter/leave event.
+  const [debouncedHoveredNode, setDebouncedHoveredNode] = useState<string | null>(null);
+  const hoverDebounceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (hoverDebounceRef.current !== null) window.clearTimeout(hoverDebounceRef.current);
+    hoverDebounceRef.current = window.setTimeout(() => setDebouncedHoveredNode(hoveredNode), 60);
+    return () => {
+      if (hoverDebounceRef.current !== null) window.clearTimeout(hoverDebounceRef.current);
+    };
+  }, [hoveredNode]);
   const [rawResult, setRawResult] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
   const [isLayouting, setIsLayouting] = useState(true);
   const [pulsingIds, setPulsingIds] = useState<Set<string>>(new Set());
@@ -233,11 +246,14 @@ const FocusCanvas: React.FC<{
   }, [rawResult.edges]);
 
   // ── Apply insight overlays + filters ────────────────────────────────────
-  useEffect(() => {
-    const cycleIds = insights?.cycleNodeIds || new Set<string>();
-    const hotspotIds = insights?.hotspotNodeIds || new Set<string>();
-    const orphanSet = new Set(insights?.orphanFiles || []);
+  // Memoized so these sets are rebuilt only when `insights` itself changes,
+  // not on every filter tweak or layout result — `orphanSet` in particular
+  // is a real `new Set(...)` construction, not just a reference read.
+  const cycleIds = useMemo(() => insights?.cycleNodeIds || new Set<string>(), [insights]);
+  const hotspotIds = useMemo(() => insights?.hotspotNodeIds || new Set<string>(), [insights]);
+  const orphanSet = useMemo(() => new Set(insights?.orphanFiles || []), [insights]);
 
+  useEffect(() => {
     const processed = rawResult.nodes
       .filter(n => {
         const path = n.data.path as string;
@@ -266,11 +282,12 @@ const FocusCanvas: React.FC<{
 
     setNodes(processed);
     setEdges(rawResult.edges.map(e => ({ ...e, data: { ...e.data, pulse: pulsingIds.has(e.id) } })));
-  }, [rawResult, insights, filters, setNodes, setEdges, pulsingIds]);
+  }, [rawResult, insights, filters, cycleIds, hotspotIds, orphanSet, setNodes, setEdges, pulsingIds]);
 
   // ── Hover/pin highlight (transitive dependency closure), scoped to the
-  // canvas's own (depth-limited) adjacency. ──────────────────────────────
-  const highlightAnchor = hoveredNode ?? canvasSelection;
+  // canvas's own (depth-limited) adjacency. Uses the debounced hover value
+  // (see above) so a sweeping cursor doesn't retrigger this per node. ────
+  const highlightAnchor = debouncedHoveredNode ?? canvasSelection;
   useEffect(() => {
     if (!highlightAnchor) {
       setNodes(nds => nds.map(n => (n.data.dimmed === false ? n : { ...n, data: { ...n.data, dimmed: false } })));
