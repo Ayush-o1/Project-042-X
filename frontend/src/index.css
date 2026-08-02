@@ -2218,6 +2218,38 @@ code, pre, kbd {
   box-shadow: var(--shadow-sm);
 }
 
+.treemap-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.treemap-breadcrumb-segment {
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color var(--duration-fast), background var(--duration-fast);
+}
+.treemap-breadcrumb-segment:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.treemap-breadcrumb-segment:last-child {
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+.treemap-breadcrumb-sep {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
 .treemap-canvas {
   position: relative;
   flex: 1;
