@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-08-02
+
+### Fixed
+- **Mobile header layout**: below the tablet-portrait breakpoint (768px), the header's single-row layout left the repository path input — the app's primary entry point — squeezed to just a few pixels wide once the logo, repo-name badge, and every action icon were accounted for, even with their text labels already hidden. The header now wraps onto two rows below that breakpoint (icons on row one, a full-width path input on row two) instead of letting the input get crushed. Verified from 375px through 1024px, including the sidebar overlay's position under the now-taller header.
+- **Opaque 500 on a nonexistent analysis path**: analyzing a local path that doesn't exist returned a generic "An unexpected error occurred" instead of the app's own typed, specific error. Root cause: `simple-git`'s constructor validates its target directory synchronously and throws its own raw Error outside of `GitIntelligenceEngine`'s existing `verifyRepository` try/catch, so it reached the API unwrapped and fell through to the catch-all 500 handler instead of the existing `GitRepositoryError` → 422 mapping. Added a regression test.
+
+### Changed
+- Renamed the Keyboard Shortcuts modal's internal `aria-labelledby` id from the stale `settings-title` (left over from before 1.6.0's "Preferences" → "Keyboard Shortcuts" relabel) to `keyboard-shortcuts-title`. No user-facing effect; a maintainability cleanup only.
+
 ## [1.6.0] - 2026-07-23
 
 ### Fixed

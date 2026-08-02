@@ -41,7 +41,7 @@ export const SettingsModal: React.FC = () => {
       onClick={e => { if (e.target === e.currentTarget) setSettingsOpen(false); }}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="settings-title"
+      aria-labelledby="keyboard-shortcuts-title"
     >
       <div ref={sheetRef} className="modal-sheet" style={{ width: 480 }}>
         <div className="modal-header">
@@ -49,7 +49,7 @@ export const SettingsModal: React.FC = () => {
             <div className="icon-tile icon-tile-md">
               <Keyboard size={14} />
             </div>
-            <h2 id="settings-title" className="modal-title">Keyboard Shortcuts</h2>
+            <h2 id="keyboard-shortcuts-title" className="modal-title">Keyboard Shortcuts</h2>
           </div>
           <button
             ref={closeRef}

@@ -13,7 +13,19 @@ export class GitIntelligenceEngine {
    * @param maxCount Optional limit on the number of commits to retrieve (for extremely large repos).
    */
   public async analyze(repoPath: string, maxCount?: number): Promise<GitGraph> {
-    const git: SimpleGit = simpleGit(repoPath);
+    let git: SimpleGit;
+    try {
+      // simple-git validates repoPath synchronously and throws its own raw
+      // Error (e.g. "Cannot use simple-git on a directory that does not
+      // exist") instead of rejecting a promise, so this needs its own
+      // try/catch — code after this point is covered by verifyRepository's.
+      git = simpleGit(repoPath);
+    } catch (e: any) {
+      const message = /does not exist/i.test(e.message)
+        ? 'The path does not exist.'
+        : e.message;
+      throw new GitRepositoryError(repoPath, message);
+    }
 
     await this.verifyRepository(git, repoPath);
 

@@ -135,12 +135,12 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
 
   return (
     <header
+      className="app-header"
       style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 var(--space-8)',
-        height: 'var(--header-height)',
         backgroundColor: 'var(--bg-panel)',
         borderBottom: '1px solid var(--border-default)',
         position: 'relative',
@@ -206,7 +206,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
       </div>
 
       {/* ── Center: Path Input ── */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)', maxWidth: 560 }}>
+      <div className="app-header-search" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)', maxWidth: 560 }}>
         <form onSubmit={handleSubmit} style={{ flex: 1, position: 'relative' }}>
           <Search
             size={14}

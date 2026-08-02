@@ -1645,6 +1645,13 @@ code, pre, kbd {
 /* ────────────────────────────────────────────────────────────
    24Q. HEADER RESPONSIVE (sidebar toggle, action-bar collapsing)
    ──────────────────────────────────────────────────────────── */
+.app-header {
+  height: var(--header-height);
+}
+.app-header-search {
+  flex: 1;
+}
+
 /* Below small-laptop (1280px) the right-hand action buttons keep their
    icons (title="" still exposes the label as a tooltip) but drop their text
    labels, reclaiming space for the center search field before anything
@@ -1655,11 +1662,34 @@ code, pre, kbd {
   }
 }
 
-/* Below tablet-portrait (768px) the wordmark is redundant next to the repo
-   name badge — drop it so the path input keeps a usable width. */
+/* Below tablet-portrait (768px): the wordmark drops, and the header wraps
+   onto two rows — icons on row one, the path input full-width on row two.
+   Measured at 480px, the single-row layout left the search input squeezed
+   to a few px wide once the logo, repo badge, and every action icon (even
+   with labels already hidden) were accounted for — it isn't a "very small
+   phone" problem, the one-row layout doesn't have room for a usable search
+   field anywhere in this whole tier. --header-height is redefined here so
+   the grid row in AppShell.tsx and the sidebar-overlay/backdrop top offset
+   (both read the same variable) grow to match, instead of clipping the
+   now-taller header. */
 @media (max-width: 767px) {
   .header-wordmark {
     display: none;
+  }
+  :root {
+    --header-height: 92px;
+  }
+  .app-header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--header-height);
+    padding-top: var(--space-3);
+    padding-bottom: var(--space-3);
+  }
+  .app-header-search {
+    order: 3;
+    flex-basis: 100%;
+    margin-top: var(--space-2);
   }
 }
 

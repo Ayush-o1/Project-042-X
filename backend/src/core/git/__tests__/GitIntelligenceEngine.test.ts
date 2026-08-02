@@ -36,6 +36,15 @@ describe('GitIntelligenceEngine', () => {
     await fs.rm(nonGitDir, { recursive: true, force: true });
   });
 
+  it('should throw GitRepositoryError, not an unwrapped simple-git error, for a path that does not exist', async () => {
+    // simple-git's constructor validates the path synchronously and throws
+    // its own raw Error instead of rejecting a promise — regression test
+    // for that error reaching the API as an opaque 500 instead of the
+    // app's typed error (and its 422 mapping in errorHandler.ts).
+    const missingDir = path.join(tempDir, 'does-not-exist');
+    await expect(engine.analyze(missingDir)).rejects.toThrow(GitRepositoryError);
+  });
+
   it('should build a topological graph for a linear history', async () => {
     await fs.writeFile(path.join(tempDir, 'file.txt'), 'hello');
     await git.add('file.txt');
