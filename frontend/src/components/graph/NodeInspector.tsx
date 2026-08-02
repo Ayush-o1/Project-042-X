@@ -17,7 +17,7 @@ const InspectorRow: React.FC<{ label: string; value: React.ReactNode }> = ({ lab
   </div>
 );
 
-const HealthBadge: React.FC<{ score: number }> = ({ score }) => {
+export const HealthBadge: React.FC<{ score: number }> = ({ score }) => {
   const color = score >= 70 ? 'var(--color-success)' : score >= 40 ? 'var(--color-warning)' : 'var(--color-danger)';
   const label = score >= 70 ? 'Healthy' : score >= 40 ? 'Degraded' : 'Critical';
   return (
@@ -366,3 +366,75 @@ export const NodeInspector = ({
     </div>
   );
 };
+
+/** Shown instead of NodeInspector when 2+ files are shift/ctrl-selected on
+ *  the canvas — a compact side-by-side comparison rather than forcing the
+ *  user to flip between single-file inspector views one at a time. */
+export const NodeComparisonPanel: React.FC<{
+  paths: string[];
+  moduleMetrics: Map<string, ModuleMetrics>;
+  onClose: () => void;
+  onRemove: (path: string) => void;
+  onFocusOne: (path: string) => void;
+}> = ({ paths, moduleMetrics, onClose, onRemove, onFocusOne }) => (
+  <div className="graph-inspector">
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: 'var(--space-5) var(--space-6)',
+      borderBottom: '1px solid var(--border-default)',
+      flexShrink: 0,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+        <FileCode size={14} color="var(--accent)" />
+        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--text-primary)' }}>
+          Comparing {paths.length} files
+        </span>
+      </div>
+      <button type="button" onClick={onClose} className="btn-icon btn-icon-md" aria-label="Clear comparison">
+        <X size={14} />
+      </button>
+    </div>
+
+    <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-4) var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      {paths.map(p => {
+        const m = moduleMetrics.get(p);
+        return (
+          <div
+            key={p}
+            role="button"
+            tabIndex={0}
+            onClick={() => onFocusOne(p)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFocusOne(p); } }}
+            style={{
+              border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)',
+              padding: 'var(--space-3)', cursor: 'pointer', background: 'var(--bg-elevated)',
+              display: 'flex', flexDirection: 'column', gap: 'var(--space-2)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+              <span style={{ fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-medium)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p}>
+                {p.split('/').pop()}
+              </span>
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onRemove(p); }}
+                className="btn-icon btn-icon-sm"
+                aria-label={`Remove ${p.split('/').pop()} from comparison`}
+              >
+                <X size={11} />
+              </button>
+            </div>
+            {m ? <HealthBadge score={m.healthScore} /> : (
+              <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>No metrics (non-source file)</span>
+            )}
+            <div style={{ display: 'flex', gap: 'var(--space-4)', fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>
+              <span>Fan-in {m?.fanIn ?? 0}</span>
+              <span>Fan-out {m?.fanOut ?? 0}</span>
+              {m && <span>Instability {m.instability.toFixed(2)}</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);

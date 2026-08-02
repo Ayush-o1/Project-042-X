@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { FileCode2, FileJson, Image as ImageIcon, File, Flame, AlertTriangle, FileWarning } from 'lucide-react';
+import { FileCode2, FileJson, Image as ImageIcon, File, Flame, AlertTriangle, FileWarning, CheckSquare } from 'lucide-react';
 import { healthToColor } from '../../lib/health';
 import type { ImportanceTier } from './layoutUtils';
 
@@ -23,6 +23,9 @@ interface FileNodeData {
   /** True when the backend's AST parse failed on this file — surfaced so a
    *  file the graph couldn't fully analyze doesn't look like any other. */
   hasSyntaxError?: boolean;
+  /** In the shift/ctrl-click comparison set — independent of `selected`
+   *  (single, RF-native) and `isCenter` (the recentered focus target). */
+  multiSelected?: boolean;
 }
 
 const IMPORTANCE_STYLES: Record<ImportanceTier, { fontSize: string; fontWeight: string; borderWidth: number }> = {
@@ -68,7 +71,14 @@ export const FileNode = memo(({ data, selected }: { data: FileNodeData; selected
       style={{
         padding: 'var(--space-4) var(--space-5)',
         backgroundColor: bgColor,
-        border: `1px solid ${borderColor}`,
+        // Longhand on every side (not `border` shorthand + `borderLeft`
+        // override) — React warns when a shorthand and a longhand for the
+        // same property update across re-renders, which this node does
+        // constantly (selection/dimmed/multiSelected all change on click,
+        // hover, and keyboard traversal).
+        borderTop: `1px solid ${borderColor}`,
+        borderRight: `1px solid ${borderColor}`,
+        borderBottom: `1px solid ${borderColor}`,
         borderLeft: `${borderWidth}px solid ${leftBorderColor}`,
         display: 'flex',
         alignItems: 'center',
@@ -81,8 +91,17 @@ export const FileNode = memo(({ data, selected }: { data: FileNodeData; selected
         transition: 'transform var(--duration-fast) var(--ease-default), border-color var(--duration-fast), box-shadow var(--duration-fast), opacity 300ms ease',
         transform: selected ? 'scale(1.02)' : 'scale(1)',
         opacity: data.dimmed ? 0.12 : 1,
+        boxShadow: data.multiSelected ? '0 0 0 2px var(--accent)' : undefined,
       }}
     >
+      {data.multiSelected && (
+        <span
+          title="In comparison set"
+          style={{ position: 'absolute', top: -7, left: -7, color: 'var(--accent)', background: 'var(--bg-surface)', borderRadius: '50%', lineHeight: 0 }}
+        >
+          <CheckSquare size={14} fill="var(--accent)" color="var(--bg-surface)" />
+        </span>
+      )}
       <Handle type="target" position={Position.Left} style={{ background: 'var(--accent)', border: 'none', width: 6, height: 6 }} />
 
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minWidth: 0 }}>

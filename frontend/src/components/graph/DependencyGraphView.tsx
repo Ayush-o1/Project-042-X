@@ -24,7 +24,7 @@ import { ModuleTreemap } from './ModuleTreemap';
 import type { TreemapColorMode } from './ModuleTreemap';
 import { ArchitectureToolbar } from './ArchitectureToolbar';
 import type { GraphFilters } from './ArchitectureToolbar';
-import { NodeInspector } from './NodeInspector';
+import { NodeInspector, NodeComparisonPanel } from './NodeInspector';
 import { Network, Loader2, ShieldAlert, Compass, AlertCircle, ArrowLeft } from 'lucide-react';
 import type { GraphNode } from '../../types';
 
@@ -58,9 +58,10 @@ const FocusCanvas: React.FC<{
   centerIds: string[];
   filters: GraphFilters;
   canvasSelection: string | null;
-  onOpenInspector: (id: string) => void;
+  multiSelection: Set<string>;
+  onOpenInspector: (id: string, multi: boolean) => void;
   onRecenter: (id: string) => void;
-}> = ({ centerIds, filters, canvasSelection, onOpenInspector, onRecenter }) => {
+}> = ({ centerIds, filters, canvasSelection, multiSelection, onOpenInspector, onRecenter }) => {
   const { dependencies, insights } = useRepositoryStore(
     useShallow(s => ({ dependencies: s.dependencies, insights: s.insights })),
   );
@@ -351,10 +352,27 @@ const FocusCanvas: React.FC<{
     }));
   }, [highlightAnchor, canvasAdjacency, setNodes, setEdges]);
 
-  const onNodeClick = useCallback((_e: React.MouseEvent, node: Node) => {
+  // ── Multi-select overlay — a separate, targeted effect (like the
+  // highlight effect above) rather than folding into the overlay/filter
+  // effect, so toggling a comparison selection doesn't re-derive every
+  // node's health/hotspot/cycle data from scratch. ───────────────────────
+  useEffect(() => {
+    setNodes(nds => nds.map(n => {
+      const isMulti = multiSelection.has(n.data.path as string);
+      return n.data.multiSelected === isMulti ? n : { ...n, data: { ...n.data, multiSelected: isMulti } };
+    }));
+  }, [multiSelection, setNodes]);
+
+  // Single click selects/previews only (opens the Inspector without a
+  // recenter+relayout); double-click recenters. Shift/Ctrl/Cmd-click
+  // extends the multi-selection instead of either.
+  const onNodeClick = useCallback((e: React.MouseEvent, node: Node) => {
+    onOpenInspector(node.id, e.shiftKey || e.metaKey || e.ctrlKey);
+  }, [onOpenInspector]);
+
+  const onNodeDoubleClick = useCallback((_e: React.MouseEvent, node: Node) => {
     onRecenter(node.id);
-    onOpenInspector(node.id);
-  }, [onRecenter, onOpenInspector]);
+  }, [onRecenter]);
 
   if (layoutError) {
     return (
@@ -408,6 +426,7 @@ const FocusCanvas: React.FC<{
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onNodeMouseEnter={(_, node) => setHoveredNode(node.id)}
         onNodeMouseLeave={() => setHoveredNode(null)}
         nodeTypes={nodeTypes}
@@ -490,6 +509,7 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
   });
   const [treemapColorMode, setTreemapColorMode] = usePersistedState<TreemapColorMode>('architectureTreemapColorMode', 'health');
   const [canvasSelection, setCanvasSelection] = useState<string | null>(null);
+  const [multiSelection, setMultiSelection] = useState<Set<string>>(new Set());
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const cycleCursorRef = useRef<Map<string, number>>(new Map());
@@ -623,17 +643,45 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
   const handleFocusFile = useCallback((id: string) => {
     setArchitectureFocusId(id);
     setCanvasSelection(id);
+    setMultiSelection(new Set());
+    // Search/treemap/risk-shortcut selection all route through this — none
+    // of them live inside the canvas, so without this the arrow-key/Enter/
+    // Escape handler stays inert until the user manually clicks the canvas
+    // background first.
+    canvasWrapperRef.current?.focus();
   }, [setArchitectureFocusId]);
 
   const handleFocusFolder = useCallback((folderPath: string) => {
     setArchitectureFocusId(`${FOLDER_PREFIX}${folderPath}`);
     setIsInspectorOpen(false);
+    setMultiSelection(new Set());
+    canvasWrapperRef.current?.focus();
   }, [setArchitectureFocusId]);
 
   const handleSelectAndOpen = useCallback((id: string) => {
     handleFocusFile(id);
     setIsInspectorOpen(true);
   }, [handleFocusFile]);
+
+  // Single click (no modifier) selects/previews without recentering;
+  // shift/ctrl/cmd-click toggles the node in the multi-select comparison
+  // set instead. Passed to FocusCanvas as `onOpenInspector`.
+  const handleNodeSelect = useCallback((id: string, multi: boolean) => {
+    if (multi) {
+      setMultiSelection(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+      setIsInspectorOpen(true);
+      canvasWrapperRef.current?.focus();
+      return;
+    }
+    setMultiSelection(new Set());
+    setCanvasSelection(id);
+    setIsInspectorOpen(true);
+    canvasWrapperRef.current?.focus();
+  }, []);
 
   // ── External highlight (deep-link from Insights) ──────────────────────
   useEffect(() => {
@@ -656,18 +704,25 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
     if (e.key === 'ArrowRight') {
       e.preventDefault();
       const next = cycleNext((globalAdjacency.forward.get(canvasSelection) ?? []).map(x => x.target));
-      if (next) setCanvasSelection(next);
+      // Recenters rather than just updating the selection cursor: the
+      // target can lie outside the currently rendered (depth-limited)
+      // neighborhood, which previously left the whole canvas dimmed to
+      // near-invisible with no visible representation of the new
+      // selection. Recentering guarantees it's always on screen, and
+      // reuses FocusCanvas's LRU cache so revisits stay instant.
+      if (next) handleFocusFile(next);
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       const next = cycleNext((globalAdjacency.reverse.get(canvasSelection) ?? []).map(x => x.source));
-      if (next) setCanvasSelection(next);
+      if (next) handleFocusFile(next);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (e.metaKey || e.ctrlKey) handleOpenFile(canvasSelection);
       else setIsInspectorOpen(true);
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      if (isInspectorOpen) setIsInspectorOpen(false);
+      if (multiSelection.size > 0) setMultiSelection(new Set());
+      else if (isInspectorOpen) setIsInspectorOpen(false);
       else setArchitectureFocusId(null);
     }
   };
@@ -699,6 +754,25 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [handleGlobalKeyDown, isActive]);
 
+  const comparisonPaths = useMemo(() => Array.from(multiSelection), [multiSelection]);
+  const showComparison = isInspectorOpen && multiSelection.size > 1;
+  const inspectorTarget = isInspectorOpen && !showComparison
+    ? (multiSelection.size === 1 ? comparisonPaths[0] : canvasSelection)
+    : null;
+
+  const handleRemoveFromComparison = useCallback((path: string) => {
+    setMultiSelection(prev => {
+      const next = new Set(prev);
+      next.delete(path);
+      return next;
+    });
+  }, []);
+
+  const handleFocusOneFromComparison = useCallback((path: string) => {
+    setMultiSelection(new Set());
+    setCanvasSelection(path);
+  }, []);
+
   if (!dependencies) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 'var(--space-6)' }}>
@@ -712,8 +786,6 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
       </div>
     );
   }
-
-  const inspectorTarget = isInspectorOpen ? canvasSelection : null;
 
   return (
     <div className="architecture-layout">
@@ -791,7 +863,8 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
               centerIds={centerIds}
               filters={filters}
               canvasSelection={canvasSelection}
-              onOpenInspector={id => { setCanvasSelection(id); setIsInspectorOpen(true); }}
+              multiSelection={multiSelection}
+              onOpenInspector={handleNodeSelect}
               onRecenter={handleFocusFile}
             />
           )}
@@ -799,8 +872,16 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
       </div>
 
       {!isCompact && (
-        <div className={`architecture-inspector-column${inspectorTarget ? ' open' : ''}`}>
-          {inspectorTarget && (
+        <div className={`architecture-inspector-column${(inspectorTarget || showComparison) ? ' open' : ''}`}>
+          {showComparison ? (
+            <NodeComparisonPanel
+              paths={comparisonPaths}
+              moduleMetrics={insights?.moduleMetrics || new Map()}
+              onClose={() => setMultiSelection(new Set())}
+              onRemove={handleRemoveFromComparison}
+              onFocusOne={handleFocusOneFromComparison}
+            />
+          ) : inspectorTarget && (
             <NodeInspector
               path={inspectorTarget}
               sizeBytes={files.find(f => f.path === inspectorTarget)?.size ?? 0}
@@ -821,26 +902,36 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
         </div>
       )}
 
-      {isCompact && inspectorTarget && (
+      {isCompact && (inspectorTarget || showComparison) && (
         <>
-          <div className="graph-inspector-backdrop" onClick={() => setIsInspectorOpen(false)} aria-hidden="true" />
+          <div className="graph-inspector-backdrop" onClick={() => { setIsInspectorOpen(false); setMultiSelection(new Set()); }} aria-hidden="true" />
           <div className="architecture-inspector-overlay">
-            <NodeInspector
-              path={inspectorTarget}
-              sizeBytes={files.find(f => f.path === inspectorTarget)?.size ?? 0}
-              onClose={() => setIsInspectorOpen(false)}
-              onOpen={handleOpenFile}
-              moduleMetrics={insights?.moduleMetrics || new Map()}
-              adjacency={globalAdjacency}
-              gitCommitMap={gitCommitMap}
-              gitAuthorsMap={gitAuthorsMap}
-              gitLastModifiedMap={gitLastModifiedMap}
-              isPinned={canvasSelection === inspectorTarget}
-              onTogglePin={() => setCanvasSelection(inspectorTarget)}
-              circularDependencies={insights?.circularDependencies ?? []}
-              packageMetrics={packageMetricsByPath}
-              folderPath={getFolderPath(inspectorTarget)}
-            />
+            {showComparison ? (
+              <NodeComparisonPanel
+                paths={comparisonPaths}
+                moduleMetrics={insights?.moduleMetrics || new Map()}
+                onClose={() => setMultiSelection(new Set())}
+                onRemove={handleRemoveFromComparison}
+                onFocusOne={handleFocusOneFromComparison}
+              />
+            ) : inspectorTarget && (
+              <NodeInspector
+                path={inspectorTarget}
+                sizeBytes={files.find(f => f.path === inspectorTarget)?.size ?? 0}
+                onClose={() => setIsInspectorOpen(false)}
+                onOpen={handleOpenFile}
+                moduleMetrics={insights?.moduleMetrics || new Map()}
+                adjacency={globalAdjacency}
+                gitCommitMap={gitCommitMap}
+                gitAuthorsMap={gitAuthorsMap}
+                gitLastModifiedMap={gitLastModifiedMap}
+                isPinned={canvasSelection === inspectorTarget}
+                onTogglePin={() => setCanvasSelection(inspectorTarget)}
+                circularDependencies={insights?.circularDependencies ?? []}
+                packageMetrics={packageMetricsByPath}
+                folderPath={getFolderPath(inspectorTarget)}
+              />
+            )}
           </div>
         </>
       )}
