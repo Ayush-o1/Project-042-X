@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { rankByFuzzyMatch, FILENAME_MATCH_BONUS } from '../../lib/fuzzyMatch';
 import {
   Search, FileCode, AlertTriangle, Filter, ChevronDown,
-  Flame, EyeOff, CircleDot, Info, FileWarning,
+  Flame, EyeOff, CircleDot, Info, FileWarning, Keyboard,
 } from 'lucide-react';
 import type { DependencyGraphData } from '../../types';
 import { healthToColor } from '../../lib/health';
@@ -16,11 +16,21 @@ export interface GraphFilters {
   fileTypeFilter: string; // '' = all, '.ts', '.js', etc.
 }
 
-const DEPTH_OPTIONS: { value: 1 | 2 | 3 | 'all'; label: string }[] = [
-  { value: 1, label: '1' },
-  { value: 2, label: '2' },
-  { value: 3, label: '3' },
-  { value: 'all', label: 'All' },
+const DEPTH_OPTIONS: { value: 1 | 2 | 3 | 'all'; label: string; key: string }[] = [
+  { value: 1, label: '1', key: '1' },
+  { value: 2, label: '2', key: '2' },
+  { value: 3, label: '3', key: '3' },
+  { value: 'all', label: 'All', key: '4' },
+];
+
+const SHORTCUTS: { keys: string; description: string }[] = [
+  { keys: '⌘K', description: 'Focus the search box' },
+  { keys: '1 2 3 4', description: 'Jump to depth 1, 2, 3, or every reachable hop' },
+  { keys: '← →', description: 'Step to the previous/next imported or importing file' },
+  { keys: 'Enter', description: 'Open the Node Inspector for the current file' },
+  { keys: '⌘/Ctrl + Enter', description: 'Open the current file in the Code Viewer' },
+  { keys: 'Esc', description: 'Close the Inspector, then clear the current focus' },
+  { keys: 'Pin icon', description: 'Keep a dependency highlight visible after the mouse leaves' },
 ];
 
 /** The toolbar needs `overflow-x: auto` so it can scroll horizontally on
@@ -90,10 +100,12 @@ export const ArchitectureToolbar = ({
   const [focused, setFocused] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [activeResultIndex, setActiveResultIndex] = useState(0);
   const searchWrapperRef = useRef<HTMLDivElement>(null);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const legendBtnRef = useRef<HTMLButtonElement>(null);
+  const shortcutsBtnRef = useRef<HTMLButtonElement>(null);
 
   const results = useMemo(() => {
     if (!query) return [];
@@ -195,7 +207,7 @@ export const ArchitectureToolbar = ({
             className={`architecture-depth-btn${depth === opt.value ? ' active' : ''}`}
             onClick={() => onDepthChange(opt.value)}
             aria-pressed={depth === opt.value}
-            title={opt.value === 'all' ? 'Show every reachable hop' : `Show ${opt.value} hop${opt.value === 1 ? '' : 's'} out`}
+            title={`${opt.value === 'all' ? 'Show every reachable hop' : `Show ${opt.value} hop${opt.value === 1 ? '' : 's'} out`} (press ${opt.key})`}
           >
             {opt.label}
           </button>
@@ -369,6 +381,41 @@ export const ArchitectureToolbar = ({
                 </div>
               ))}
             </div>
+          </div>
+        </AnchoredPanel>
+      </div>
+
+      <div style={{ position: 'relative' }}>
+        <button
+          ref={shortcutsBtnRef}
+          type="button"
+          onClick={() => setShortcutsOpen(v => !v)}
+          title="Keyboard shortcuts"
+          aria-label="Keyboard shortcuts"
+          aria-expanded={shortcutsOpen}
+          className="btn-icon btn-icon-md"
+          style={{ color: shortcutsOpen ? 'var(--accent)' : 'var(--text-tertiary)' }}
+        >
+          <Keyboard size={15} />
+        </button>
+
+        <AnchoredPanel anchorRef={shortcutsBtnRef} open={shortcutsOpen} align="right">
+          <div className="filter-panel" style={{ minWidth: 260 }}>
+            <span className="field-label">Keyboard shortcuts</span>
+            {SHORTCUTS.map(({ keys, description }) => (
+              <div key={keys} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3)' }}>
+                <kbd style={{
+                  flexShrink: 0, minWidth: 56, textAlign: 'center',
+                  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-primary)', background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-default)', borderRadius: 4,
+                  padding: '2px 6px',
+                }}>
+                  {keys}
+                </kbd>
+                <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-secondary)' }}>{description}</span>
+              </div>
+            ))}
           </div>
         </AnchoredPanel>
       </div>

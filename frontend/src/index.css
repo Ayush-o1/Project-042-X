@@ -278,6 +278,20 @@ code, pre, kbd {
   border-radius: var(--radius-md);
 }
 
+/* Visually hidden but still reachable by screen readers — for text that
+   exists purely to be referenced via aria-describedby/aria-labelledby. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Skip-to-content link — off-screen until keyboard-focused, so a keyboard
    or screen-reader user landing on the page doesn't have to tab through the
    sidebar toggle, logo, path input, and every header action before reaching
@@ -2333,6 +2347,15 @@ code, pre, kbd {
   position: relative;
   min-height: 0;
   outline: none;
+}
+/* The canvas is the primary tabIndex=0 entry point for the custom
+   arrow-key/Enter/Escape interaction model — removing the global
+   `:focus-visible` outline above with no replacement meant a keyboard
+   user tabbing to it got zero visual confirmation they'd focused it. */
+.architecture-canvas-panel:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+  border-radius: var(--radius-lg);
 }
 
 .architecture-canvas-status {

@@ -769,12 +769,19 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
             </div>
           );
         })()}
+        <span id="architecture-canvas-shortcuts-desc" className="sr-only">
+          Use the arrow keys to step between imported and importing files, Enter to open the
+          Node Inspector, Control or Command plus Enter to open the file in the Code Viewer,
+          Escape to close the Inspector or clear focus, and the digit keys 1 through 4 to change
+          the neighborhood depth.
+        </span>
         <div
           ref={canvasWrapperRef}
           className="architecture-canvas-panel"
           tabIndex={0}
           role="application"
           aria-label="Dependency focus canvas"
+          aria-describedby="architecture-canvas-shortcuts-desc"
           onKeyDown={handleCanvasKeyDown}
         >
           {centerIds.length === 0 ? (
