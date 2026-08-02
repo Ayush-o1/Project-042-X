@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-08-02
+
+### Fixed
+- **Architecture page hanging on "Laying out neighborhood…"**: focusing a file or folder in a densely-connected neighborhood (common on real-world cloned repos with hub/barrel files) could leave the spinner running for tens of seconds or, if the layout worker threw or failed to load, indefinitely with no recovery. Root-caused by benchmarking the installed `dagre@0.8.5` directly: `dagre.layout()` is severely superlinear in edge count (~1.2s at 700 edges, ~37s at 2800), and `getFocusedLayout` calls it twice per request with no cap on how many edges a neighborhood could include. Fixed with four changes: (1) a cheap pre-check (BFS + edge count, no dagre) that auto-steps the requested depth down — and, for a genuine mega-hub where even depth 1 is too dense, truncates to the highest in-degree files — before ever reaching dagre, surfaced to the user via an inline notice with a "Load full anyway" override rather than silently rendering something other than what the depth stepper claims; (2) a `worker.onerror` handler, previously entirely absent, so a worker failure resolves the spinner into a Retry state instead of hanging forever; (3) a timeout safety net with Cancel, in case an unanticipated case still slips past the budget; (4) a small LRU layout cache so revisiting a recently-viewed neighborhood is instant. Verified against the exact remote-repo/folder combination from the original report (a clean re-layout in ~560ms where it previously hung).
+
 ## [1.6.1] - 2026-08-02
 
 ### Fixed

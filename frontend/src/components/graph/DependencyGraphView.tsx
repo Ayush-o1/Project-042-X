@@ -16,12 +16,13 @@ import type { DagreLayoutRequest, DagreLayoutResponse } from './dagreLayout.work
 import { FileNode } from './FileNode';
 import { CustomEdge } from './CustomEdge';
 import { getFolderPath, importanceTier } from './layoutUtils';
+import type { FocusedLayoutMeta } from './layoutUtils';
 import { ModuleTreemap } from './ModuleTreemap';
 import type { TreemapColorMode } from './ModuleTreemap';
 import { ArchitectureToolbar } from './ArchitectureToolbar';
 import type { GraphFilters } from './ArchitectureToolbar';
 import { NodeInspector } from './NodeInspector';
-import { Network, Loader2, ShieldAlert, Compass } from 'lucide-react';
+import { Network, Loader2, ShieldAlert, Compass, AlertCircle } from 'lucide-react';
 import type { GraphNode } from '../../types';
 
 const nodeTypes = { fileNode: FileNode };
@@ -51,27 +52,76 @@ const FocusCanvas: React.FC<{
   const [rawResult, setRawResult] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
   const [isLayouting, setIsLayouting] = useState(true);
   const [pulsingIds, setPulsingIds] = useState<Set<string>>(new Set());
+  const [layoutMeta, setLayoutMeta] = useState<FocusedLayoutMeta | null>(null);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [isTakingLong, setIsTakingLong] = useState(false);
+  const [override, setOverride] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
 
   // ── Depth-limited layout, off the main thread ──────────────────────────
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
+  const timeoutRef = useRef<number | null>(null);
+  // Small LRU: revisiting a recently-laid-out neighborhood (a very common
+  // back-and-forth navigation pattern) renders instantly instead of
+  // re-running the worker round trip.
+  const cacheRef = useRef<Map<string, { nodes: Node[]; edges: Edge[]; meta: FocusedLayoutMeta }>>(new Map());
   const centerKey = centerIds.join(' ');
+  // The budget cap (see layoutUtils.ts) keeps the default path well under
+  // this; 13s is a safety net for the rare pathological case that slips
+  // through, not the expected happy path. The override path intentionally
+  // gets a much longer allowance — the user asked for the expensive layout
+  // and was told upfront it can take up to ~40s.
+  const LAYOUT_TIMEOUT_MS = 13000;
+  const OVERRIDE_TIMEOUT_MS = 45000;
+  const CACHE_LIMIT = 30;
+
+  // A new focus target resets any explicit "load it anyway" override from
+  // a previous, unrelated neighborhood.
+  useEffect(() => { setOverride(false); }, [centerKey, architectureDepth]);
 
   useEffect(() => {
     if (!dependencies || centerIds.length === 0) {
       setRawResult({ nodes: [], edges: [] });
+      setLayoutMeta(null);
+      setLayoutError(null);
       return;
     }
+
+    const cacheKey = `${centerKey}|${architectureDepth}|${override ? 1 : 0}`;
+    const cached = cacheRef.current.get(cacheKey);
+    if (cached) {
+      // Touch for LRU: move to the most-recently-used end.
+      cacheRef.current.delete(cacheKey);
+      cacheRef.current.set(cacheKey, cached);
+      setRawResult({ nodes: cached.nodes, edges: cached.edges });
+      setLayoutMeta(cached.meta);
+      setIsLayouting(false);
+      setLayoutError(null);
+      setIsTakingLong(false);
+      return;
+    }
+
     if (!workerRef.current) {
       workerRef.current = new Worker(new URL('./dagreLayout.worker.ts', import.meta.url), { type: 'module' });
     }
     const worker = workerRef.current;
     const requestId = ++requestIdRef.current;
     setIsLayouting(true);
+    setLayoutError(null);
+    setIsTakingLong(false);
+
+    const clearTimer = () => {
+      if (timeoutRef.current !== null) {
+        window.clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
 
     const handleMessage = (e: MessageEvent<DagreLayoutResponse>) => {
       if (e.data.requestId !== requestIdRef.current) return;
-      const { nodes: laidOut, edges: laidOutEdges } = e.data.result;
+      clearTimer();
+      const { nodes: laidOut, edges: laidOutEdges, meta } = e.data.result;
       const xyNodes: Node[] = laidOut.map(n => {
         const { width, height } = importanceTier(n.inDegree) === 'large'
           ? { width: 300, height: 76 }
@@ -90,7 +140,15 @@ const FocusCanvas: React.FC<{
           },
         };
       });
+
+      cacheRef.current.set(cacheKey, { nodes: xyNodes, edges: laidOutEdges, meta });
+      if (cacheRef.current.size > CACHE_LIMIT) {
+        const oldestKey = cacheRef.current.keys().next().value;
+        if (oldestKey !== undefined) cacheRef.current.delete(oldestKey);
+      }
+
       setRawResult({ nodes: xyNodes, edges: laidOutEdges });
+      setLayoutMeta(meta);
       setIsLayouting(false);
 
       // Pulse edges leaving the new center once, then settle — the one
@@ -100,14 +158,63 @@ const FocusCanvas: React.FC<{
       setPulsingIds(toPulse);
       window.setTimeout(() => setPulsingIds(new Set()), PULSE_DURATION_MS);
     };
+
+    const handleError = (ev: ErrorEvent) => {
+      if (requestIdRef.current !== requestId) return;
+      clearTimer();
+      setIsLayouting(false);
+      setLayoutError(ev.message || 'Something went wrong laying out this neighborhood.');
+      // The worker may be left mid-broken after an uncaught exception —
+      // drop it and let the next request create a fresh one, rather than
+      // leaving `isLayouting` stuck true forever with no recovery.
+      worker.terminate();
+      workerRef.current = null;
+    };
+
     worker.addEventListener('message', handleMessage);
+    worker.addEventListener('error', handleError);
+
+    // Defense-in-depth on top of the budget cap in getFocusedLayout: if a
+    // request is still running past this, something (an unanticipated
+    // pathological graph shape, an `override` request that's genuinely
+    // slow) is taking far longer than expected — surface that instead of a
+    // silent, indistinguishable-from-hung spinner. Always armed (never
+    // skipped), just with a much longer allowance for `override` requests.
+    timeoutRef.current = window.setTimeout(
+      () => setIsTakingLong(true),
+      override ? OVERRIDE_TIMEOUT_MS : LAYOUT_TIMEOUT_MS,
+    );
+
     worker.postMessage({
-      requestId, data: dependencies, centerIds, depth: architectureDepth,
+      requestId, data: dependencies, centerIds, depth: architectureDepth, override,
     } satisfies DagreLayoutRequest);
-    return () => worker.removeEventListener('message', handleMessage);
-  }, [dependencies, centerKey, architectureDepth]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return () => {
+      worker.removeEventListener('message', handleMessage);
+      worker.removeEventListener('error', handleError);
+      clearTimer();
+    };
+  }, [dependencies, centerKey, architectureDepth, override, retryToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { workerRef.current?.terminate(); workerRef.current = null; }, []);
+
+  const handleCancelLayout = useCallback(() => {
+    requestIdRef.current++; // invalidate any in-flight response/error for this request
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    setIsLayouting(false);
+    setIsTakingLong(false);
+    // Falling back to the capped view (rather than leaving a blank canvas)
+    // re-triggers the effect at the safe budget instead of the request
+    // that was just cancelled.
+    setOverride(false);
+    setRetryToken(t => t + 1);
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    setLayoutError(null);
+    setRetryToken(t => t + 1);
+  }, []);
 
   // ── Canvas-local adjacency (only edges actually rendered) for the
   // hover/pin dependency-chain highlight — deliberately scoped to what's
@@ -211,35 +318,72 @@ const FocusCanvas: React.FC<{
     onOpenInspector(node.id);
   }, [onRecenter, onOpenInspector]);
 
+  if (layoutError) {
+    return (
+      <div className="architecture-canvas-status">
+        <AlertCircle size={20} style={{ color: 'var(--color-danger)' }} />
+        <span>{layoutError}</span>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={handleRetry}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   if (isLayouting && nodes.length === 0) {
     return (
       <div className="architecture-canvas-status">
         <Loader2 size={20} className="animate-spin" style={{ color: 'var(--accent)' }} />
-        <span>Laying out neighborhood…</span>
+        <span>{override ? 'Laying out the full neighborhood — this can take up to a minute for dense graphs…' : 'Laying out neighborhood…'}</span>
+        {isTakingLong && (
+          <div className="architecture-canvas-timeout-notice">
+            <span>This is taking longer than expected.</span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handleCancelLayout}>
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onNodeClick={onNodeClick}
-      onNodeMouseEnter={(_, node) => setHoveredNode(node.id)}
-      onNodeMouseLeave={() => setHoveredNode(null)}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      fitView
-      fitViewOptions={{ duration: 500, padding: 0.3, maxZoom: 1.1 }}
-      attributionPosition="bottom-right"
-      minZoom={0.2}
-      maxZoom={2}
-      proOptions={{ hideAttribution: false }}
-    >
-      <Background color="rgba(255,255,255,0.04)" gap={20} size={1} />
-    </ReactFlow>
+    <>
+      {layoutMeta?.reduced && (
+        <div className="architecture-canvas-notice" role="status">
+          <ShieldAlert size={14} />
+          <span>
+            {layoutMeta.truncated
+              ? `This neighborhood is too dense to lay out in full (${layoutMeta.edgeCount.toLocaleString()}+ edges) — showing the most important files.`
+              : `Depth ${layoutMeta.requestedDepth} would be too dense (${layoutMeta.edgeCount.toLocaleString()} edges) — showing depth ${layoutMeta.effectiveDepth} instead.`}
+          </span>
+          {!override && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOverride(true)}>
+              Load full anyway
+            </button>
+          )}
+        </div>
+      )}
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        onNodeMouseEnter={(_, node) => setHoveredNode(node.id)}
+        onNodeMouseLeave={() => setHoveredNode(null)}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        fitView
+        fitViewOptions={{ duration: 500, padding: 0.3, maxZoom: 1.1 }}
+        attributionPosition="bottom-right"
+        minZoom={0.2}
+        maxZoom={2}
+        proOptions={{ hideAttribution: false }}
+      >
+        <Background color="rgba(255,255,255,0.04)" gap={20} size={1} />
+      </ReactFlow>
+    </>
   );
 };
 

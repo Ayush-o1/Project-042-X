@@ -18,6 +18,10 @@ export interface DagreLayoutRequest {
    *  requesting a layout entirely in that case. */
   centerIds: string[];
   depth: 1 | 2 | 3 | 'all';
+  /** Skip the edge/node budget check and lay out exactly the requested
+   *  depth, however expensive — set when the user explicitly dismisses a
+   *  "neighborhood too large" reduction notice. */
+  override?: boolean;
 }
 
 export interface DagreLayoutResponse {
@@ -28,8 +32,8 @@ export interface DagreLayoutResponse {
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = (e: MessageEvent<DagreLayoutRequest>) => {
-  const { requestId, data, centerIds, depth } = e.data;
-  const result = getFocusedLayout(data, centerIds, depth);
+  const { requestId, data, centerIds, depth, override } = e.data;
+  const result = getFocusedLayout(data, centerIds, depth, { override });
   const response: DagreLayoutResponse = { requestId, result };
   ctx.postMessage(response);
 };
