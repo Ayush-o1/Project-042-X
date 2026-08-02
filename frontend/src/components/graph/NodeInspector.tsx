@@ -1,9 +1,9 @@
 import React from 'react';
-import type { ModuleMetrics } from '../../lib/insightsEngine';
+import type { ModuleMetrics, PackageMetrics } from '../../lib/insightsEngine';
 import {
   FileCode, ExternalLink, Users, Clock,
   ArrowUpRight, ArrowDownRight, ShieldAlert,
-  EyeOff, CircleDot, Hash, Pin, GitCommit, X
+  EyeOff, CircleDot, Hash, Pin, GitCommit, X, Folder,
 } from 'lucide-react';
 
 const InspectorRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
@@ -58,6 +58,9 @@ export const NodeInspector = ({
   gitLastModifiedMap,
   isPinned,
   onTogglePin,
+  circularDependencies,
+  packageMetrics,
+  folderPath,
 }: {
   path: string;
   sizeBytes: number;
@@ -72,6 +75,15 @@ export const NodeInspector = ({
    *  mouse leaves it) rather than just hover-previewed. */
   isPinned: boolean;
   onTogglePin: () => void;
+  /** Every circular-dependency chain in the repo — filtered down to the
+   *  ones this file actually participates in, so "In Cycle" can show which
+   *  files, not just that it's true. */
+  circularDependencies: string[][];
+  packageMetrics: Map<string, PackageMetrics>;
+  /** This file's containing directory (same grouping the treemap uses) —
+   *  looked up in `packageMetrics` to show the enclosing package's cohesion
+   *  as first-class UI instead of only a treemap hover tooltip. */
+  folderPath: string | null;
 }) => {
   const fileName = path?.split('/').pop() || '';
   const ext = fileName.includes('.') ? `.${fileName.split('.').pop()}` : '';
@@ -89,6 +101,9 @@ export const NodeInspector = ({
   const commitCount = gitCommitMap.get(path) ?? metrics?.commitCount ?? 0;
   const authors = gitAuthorsMap.get(path) || [];
   const lastModified = gitLastModifiedMap.get(path) || null;
+
+  const cyclesForFile = circularDependencies.filter(chain => chain.includes(path));
+  const pkgMetrics = folderPath ? packageMetrics.get(folderPath) : undefined;
 
   const FileList: React.FC<{ paths: string[]; label: string; icon: React.ReactNode; color: string }> = ({ paths, label, icon, color }) => (
     paths.length > 0 ? (
@@ -270,6 +285,54 @@ export const NodeInspector = ({
                 <EyeOff size={9} /> Orphan
               </span>
             )}
+          </div>
+        )}
+
+        {/* Circular dependency chains — which files, not just "yes/no" */}
+        {cyclesForFile.length > 0 && (
+          <div>
+            <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
+              <CircleDot size={10} /> Circular Dependency Chain{cyclesForFile.length > 1 ? 's' : ''} ({cyclesForFile.length})
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              {cyclesForFile.map((chain, i) => (
+                <div key={i} style={{ fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--color-danger)', background: 'var(--color-danger-subtle)', border: '1px solid var(--color-danger-border)', borderRadius: 6, padding: 'var(--space-2)', lineHeight: 'var(--leading-relaxed)', wordBreak: 'break-word' }}>
+                  {chain.map((p, j) => (
+                    <React.Fragment key={j}>
+                      <span style={{ fontWeight: p === path ? 'var(--weight-semibold)' : undefined, textDecoration: p === path ? 'underline' : undefined }}>
+                        {p.split('/').pop()}
+                      </span>
+                      {j < chain.length - 1 && <span style={{ opacity: 0.5 }}> → </span>}
+                    </React.Fragment>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Containing package's cohesion — previously only a treemap hover tooltip */}
+        {pkgMetrics && (
+          <div>
+            <div className="field-label" style={{ marginBottom: 'var(--space-2)' }}>
+              <Folder size={10} /> Package: {folderPath?.split('/').pop()}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+              <div style={{ flex: 1, height: 6, background: 'var(--bg-elevated)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${pkgMetrics.cohesion * 100}%`,
+                  background: pkgMetrics.cohesion > 0.7 ? 'var(--color-success)' : pkgMetrics.cohesion > 0.4 ? 'var(--color-warning)' : 'var(--color-danger)',
+                  borderRadius: 3,
+                }} />
+              </div>
+              <span style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)', minWidth: 30 }}>
+                {(pkgMetrics.cohesion * 100).toFixed(0)}%
+              </span>
+            </div>
+            <div style={{ fontSize: 'var(--text-2xs)', color: 'var(--text-tertiary)' }}>
+              {pkgMetrics.internalEdges} internal edge{pkgMetrics.internalEdges === 1 ? '' : 's'} · {pkgMetrics.externalEdges} crossing the package boundary
+            </div>
           </div>
         )}
 

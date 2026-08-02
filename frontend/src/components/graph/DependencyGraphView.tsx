@@ -535,6 +535,11 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
     return { gitCommitMap: commitMap, gitAuthorsMap: authorsMap, gitLastModifiedMap: lastModMap };
   }, [git, files]);
 
+  const packageMetricsByPath = useMemo(
+    () => new Map((insights?.packageMetrics ?? []).map(p => [p.path, p])),
+    [insights],
+  );
+
   const fileTypes = useMemo(() => {
     if (!dependencies) return [];
     const exts = new Set<string>();
@@ -709,6 +714,9 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
               gitLastModifiedMap={gitLastModifiedMap}
               isPinned={canvasSelection === inspectorTarget}
               onTogglePin={() => setCanvasSelection(inspectorTarget)}
+              circularDependencies={insights?.circularDependencies ?? []}
+              packageMetrics={packageMetricsByPath}
+              folderPath={getFolderPath(inspectorTarget)}
             />
           )}
         </div>
@@ -730,6 +738,9 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
               gitLastModifiedMap={gitLastModifiedMap}
               isPinned={canvasSelection === inspectorTarget}
               onTogglePin={() => setCanvasSelection(inspectorTarget)}
+              circularDependencies={insights?.circularDependencies ?? []}
+              packageMetrics={packageMetricsByPath}
+              folderPath={getFolderPath(inspectorTarget)}
             />
           </div>
         </>
