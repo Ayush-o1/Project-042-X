@@ -157,6 +157,83 @@ describe('getFocusedLayout', () => {
   });
 });
 
+describe('getFocusedLayout — multi-handle fan-out', () => {
+  it('assigns each edge into a hub a distinct targetHandle instead of sharing one fixed handle', () => {
+    const hub: DependencyGraphData = {
+      nodes: [
+        { id: 'hub', path: 'hub.ts', name: 'hub.ts', type: 'TypeScript' },
+        ...['e0', 'e1', 'e2', 'e3'].map(id => ({ id, path: `${id}.ts`, name: `${id}.ts`, type: 'TypeScript' })),
+      ],
+      edges: ['e0', 'e1', 'e2', 'e3'].map(id => ({ sourceId: id, targetId: 'hub', type: 'static' as const })),
+    };
+    const { nodes, edges } = getFocusedLayout(hub, ['hub'], 1);
+    const hubNode = nodes.find(n => n.id === 'hub')!;
+    expect(hubNode.renderedInCount).toBe(4);
+    expect(hubNode.renderedOutCount).toBe(0);
+
+    const targetHandles = edges.map(e => e.targetHandle);
+    expect(new Set(targetHandles).size).toBe(4); // every incoming edge gets its own handle
+    expect(targetHandles.every(h => h?.startsWith('target-'))).toBe(true);
+  });
+
+  it('a node with a single connection still gets a handle (falls back to the centered position)', () => {
+    const { nodes } = getFocusedLayout(deps, ['/r/src/a.ts'], 1);
+    const dependent = nodes.find(n => n.id === '/r/main.ts')!; // main -> a, a's only importer
+    expect(dependent.renderedOutCount).toBe(1);
+  });
+});
+
+describe('getFocusedLayout — disconnected multi-center folder focus', () => {
+  it('does not overlap two unrelated center files and their independent neighborhoods', () => {
+    // Two disjoint pairs: main->a (one component) and x->y (a second,
+    // unrelated component) — a folder focus centered on {a, y} would
+    // previously leave x/y wherever their own independent dagre pass put
+    // them, with no guarantee against overlapping main/a.
+    const disjoint: DependencyGraphData = {
+      nodes: [
+        { id: 'main', path: 'main.ts', name: 'main.ts', type: 'TypeScript' },
+        { id: 'a', path: 'a.ts', name: 'a.ts', type: 'TypeScript' },
+        { id: 'x', path: 'x.ts', name: 'x.ts', type: 'TypeScript' },
+        { id: 'y', path: 'y.ts', name: 'y.ts', type: 'TypeScript' },
+      ],
+      edges: [
+        { sourceId: 'main', targetId: 'a', type: 'static' },
+        { sourceId: 'x', targetId: 'y', type: 'static' },
+      ],
+    };
+    const { nodes } = getFocusedLayout(disjoint, ['a', 'y'], 1);
+    const byId = new Map(nodes.map(n => [n.id, n]));
+    // The anchor component (main, a) keeps its normal position; the
+    // unrelated component (x, y) must be shifted away, not left
+    // overlapping it.
+    const anchorYs = [byId.get('main')!.position.y, byId.get('a')!.position.y];
+    const otherYs = [byId.get('x')!.position.y, byId.get('y')!.position.y];
+    const anchorMax = Math.max(...anchorYs);
+    const otherMin = Math.min(...otherYs);
+    expect(otherMin).toBeGreaterThan(anchorMax);
+  });
+});
+
+describe('getFocusedLayout — orientation', () => {
+  it('defaults to LR: dependencies right of center, dependents left', () => {
+    const { nodes } = getFocusedLayout(deps, ['/r/src/a.ts'], 2);
+    const center = nodes.find(n => n.id === '/r/src/a.ts')!;
+    const dependency = nodes.find(n => n.id === '/r/src/b.ts')!;
+    const dependent = nodes.find(n => n.id === '/r/main.ts')!;
+    expect(dependency.position.x).toBeGreaterThan(center.position.x);
+    expect(dependent.position.x).toBeLessThan(center.position.x);
+  });
+
+  it('TB orientation ranks along y instead of x: dependencies below center, dependents above', () => {
+    const { nodes } = getFocusedLayout(deps, ['/r/src/a.ts'], 2, { orientation: 'TB' });
+    const center = nodes.find(n => n.id === '/r/src/a.ts')!;
+    const dependency = nodes.find(n => n.id === '/r/src/b.ts')!;
+    const dependent = nodes.find(n => n.id === '/r/main.ts')!;
+    expect(dependency.position.y).toBeGreaterThan(center.position.y);
+    expect(dependent.position.y).toBeLessThan(center.position.y);
+  });
+});
+
 describe('getFolderPath', () => {
   it('returns the immediate containing directory', () => {
     expect(getFolderPath('/r/src/components/Foo.tsx')).toBe('/r/src/components');

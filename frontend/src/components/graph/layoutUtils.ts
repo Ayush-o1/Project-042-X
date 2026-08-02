@@ -52,6 +52,8 @@ export function getFolderPath(filePath: string): string | null {
 const RANK_SEP = 140;
 const NODE_SEP = 24;
 
+export type LayoutOrientation = 'LR' | 'TB';
+
 /** One "side" of a focused neighborhood — either the dependency side
  *  (edges flowing out of the center) or the dependent side (edges flowing
  *  into the center), laid out independently with dagre and then merged by
@@ -62,13 +64,14 @@ function layoutSide(
   data: DependencyGraphData,
   direction: 'forward' | 'backward',
   inDegreeByFile: Map<string, number>,
+  orientation: LayoutOrientation,
 ): { nodes: Map<string, { x: number; y: number }>; edges: Edge[] } {
   const included = new Set(centerIds);
   reachable.forEach((_hop, id) => included.add(id));
 
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: 'LR', nodesep: NODE_SEP, ranksep: RANK_SEP });
+  g.setGraph({ rankdir: orientation, nodesep: NODE_SEP, ranksep: RANK_SEP });
 
   for (const id of included) {
     const tier = importanceTier(inDegreeByFile.get(id) ?? 0);
@@ -164,6 +167,14 @@ export interface FocusedLayoutNode {
   outDegree: number;
   hasSyntaxError?: boolean;
   position: { x: number; y: number };
+  /** How many edges are actually rendered into/out of this node *in this
+   *  canvas* (depth-limited, unlike inDegree/outDegree above which are
+   *  whole-graph counts) — drives how many Handles FileNode renders so
+   *  connections fan out across the node's height instead of every edge
+   *  converging on one fixed point (the previous behavior on any node with
+   *  more than a couple of visible connections). */
+  renderedInCount: number;
+  renderedOutCount: number;
 }
 
 /** dagre's layout pass is severely superlinear in edge count (benchmarked
@@ -262,6 +273,115 @@ function truncateToImportant(
   return kept;
 }
 
+/** Folder-focus can center on many files at once (every file in the
+ *  folder); only the first (`anchorId`) is used to align the two dagre
+ *  passes (see `getFocusedLayout`), so any other center whose own
+ *  neighborhood doesn't connect back to the anchor's keeps whatever
+ *  position its independent dagre pass happened to give it — dagre gives
+ *  no overlap guarantee *across* disconnected subgraphs sharing one rank
+ *  space, so two unrelated sibling files could silently render on top of
+ *  each other. This finds connected components in the actually-rendered
+ *  node/edge set and stacks every component that isn't the anchor's below
+ *  it, with a fixed gap, so nothing overlaps. Not space-optimal — just
+ *  guaranteed non-overlapping, which is what was missing. */
+function separateDisconnectedComponents(
+  positioned: Map<string, { x: number; y: number }>,
+  edges: Edge[],
+  anchorId: string,
+): Map<string, { x: number; y: number }> {
+  const adjacency = new Map<string, Set<string>>();
+  for (const id of positioned.keys()) adjacency.set(id, new Set());
+  for (const e of edges) {
+    if (positioned.has(e.source) && positioned.has(e.target)) {
+      adjacency.get(e.source)?.add(e.target);
+      adjacency.get(e.target)?.add(e.source);
+    }
+  }
+
+  const visited = new Set<string>();
+  const components: string[][] = [];
+  for (const id of positioned.keys()) {
+    if (visited.has(id)) continue;
+    const comp: string[] = [];
+    const stack = [id];
+    visited.add(id);
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      comp.push(cur);
+      for (const n of adjacency.get(cur) ?? []) {
+        if (!visited.has(n)) { visited.add(n); stack.push(n); }
+      }
+    }
+    components.push(comp);
+  }
+  if (components.length <= 1) return positioned;
+
+  const bbox = (ids: string[]) => {
+    let minY = Infinity, maxY = -Infinity;
+    for (const id of ids) {
+      const p = positioned.get(id)!;
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    return { minY, maxY };
+  };
+
+  const anchorComp = components.find(c => c.includes(anchorId)) ?? components[0];
+  const COMPONENT_GAP = 120;
+  let cursorY = bbox(anchorComp).maxY + COMPONENT_GAP;
+
+  const result = new Map(positioned);
+  for (const comp of components) {
+    if (comp === anchorComp) continue;
+    const box = bbox(comp);
+    const offsetY = cursorY - box.minY;
+    for (const id of comp) {
+      const p = positioned.get(id)!;
+      result.set(id, { x: p.x, y: p.y + offsetY });
+    }
+    cursorY += (box.maxY - box.minY) + COMPONENT_GAP;
+  }
+  return result;
+}
+
+/** Assigns each edge a distinct `sourceHandle`/`targetHandle` id (rather
+ *  than every edge sharing FileNode's one fixed Handle per side), and
+ *  records how many handles each node needs on each side in
+ *  `renderedInCount`/`renderedOutCount`. Ordered by the other endpoint's y
+ *  position so handles read top-to-bottom in roughly the same order the
+ *  edges visually approach the node, minimizing crossings — mutates
+ *  `edges` in place. */
+function assignHandles(
+  edges: Edge[],
+  positioned: Map<string, { x: number; y: number }>,
+): { inCount: Map<string, number>; outCount: Map<string, number> } {
+  const bySource = new Map<string, Edge[]>();
+  const byTarget = new Map<string, Edge[]>();
+  for (const e of edges) {
+    if (!bySource.has(e.source)) bySource.set(e.source, []);
+    bySource.get(e.source)!.push(e);
+    if (!byTarget.has(e.target)) byTarget.set(e.target, []);
+    byTarget.get(e.target)!.push(e);
+  }
+
+  const yOf = (id: string) => positioned.get(id)?.y ?? 0;
+  const outCount = new Map<string, number>();
+  bySource.forEach((list, nodeId) => {
+    list.sort((a, b) => yOf(a.target) - yOf(b.target));
+    list.forEach((e, i) => { e.sourceHandle = `source-${i}`; });
+    outCount.set(nodeId, list.length);
+  });
+
+  const inCount = new Map<string, number>();
+  byTarget.forEach((list, nodeId) => {
+    list.sort((a, b) => yOf(a.source) - yOf(b.source));
+    list.forEach((e, i) => { e.targetHandle = `target-${i}`; });
+    inCount.set(nodeId, list.length);
+  });
+
+  return { inCount, outCount };
+}
+
 /**
  * Lays out a depth-limited neighborhood around one or more "center" files —
  * a single focused file, or every file in a focused folder (siblings, one
@@ -288,8 +408,9 @@ export function getFocusedLayout(
   data: DependencyGraphData,
   centerIds: string[],
   depth: 1 | 2 | 3 | 'all',
-  options: { budget?: LayoutBudget; override?: boolean } = {},
+  options: { budget?: LayoutBudget; override?: boolean; orientation?: LayoutOrientation } = {},
 ): FocusedLayoutResult {
+  const orientation = options.orientation ?? 'LR';
   const emptyMeta: FocusedLayoutMeta = {
     requestedDepth: depth, effectiveDepth: depth, nodeCount: 0, edgeCount: 0, reduced: false, truncated: false,
   };
@@ -342,8 +463,8 @@ export function getFocusedLayout(
     }
   }
 
-  const depSide = layoutSide(centerIds, neighborhood.dependencies, data, 'forward', inDegreeByFile);
-  const depentSide = layoutSide(centerIds, neighborhood.dependents, data, 'backward', inDegreeByFile);
+  const depSide = layoutSide(centerIds, neighborhood.dependencies, data, 'forward', inDegreeByFile, orientation);
+  const depentSide = layoutSide(centerIds, neighborhood.dependents, data, 'backward', inDegreeByFile, orientation);
 
   // Anchor both sides on the primary center node so they share one
   // coordinate space; any additional center nodes (folder-focus siblings)
@@ -353,14 +474,27 @@ export function getFocusedLayout(
   const depAnchor = depSide.nodes.get(anchorId) ?? { x: 0, y: 0 };
   const depentAnchor = depentSide.nodes.get(anchorId) ?? { x: 0, y: 0 };
 
-  const positioned = new Map<string, { x: number; y: number }>();
+  let positioned = new Map<string, { x: number; y: number }>();
   depSide.nodes.forEach((pos, id) => {
     positioned.set(id, { x: pos.x - depAnchor.x, y: pos.y - depAnchor.y });
   });
   depentSide.nodes.forEach((pos, id) => {
     if (positioned.has(id) && centerIds.includes(id)) return; // already placed via dep side
-    positioned.set(id, { x: -(pos.x - depentAnchor.x), y: pos.y - depentAnchor.y });
+    const dx = pos.x - depentAnchor.x;
+    const dy = pos.y - depentAnchor.y;
+    // Dependents render on the opposite side of the center from
+    // dependencies — mirrored across whichever axis dagre actually ranked
+    // along, so it matches the chosen orientation instead of always
+    // negating x (which only makes sense for the LR default).
+    positioned.set(id, orientation === 'TB' ? { x: dx, y: -dy } : { x: -dx, y: dy });
   });
+
+  const edgeById = new Map<string, Edge>();
+  for (const e of [...depSide.edges, ...depentSide.edges]) edgeById.set(e.id, e);
+  const edges = Array.from(edgeById.values());
+
+  positioned = separateDisconnectedComponents(positioned, edges, anchorId);
+  const { inCount, outCount } = assignHandles(edges, positioned);
 
   const nodes: FocusedLayoutNode[] = [];
   positioned.forEach((position, id) => {
@@ -376,15 +510,14 @@ export function getFocusedLayout(
       outDegree: outDegreeByFile.get(id) ?? 0,
       hasSyntaxError: raw.hasSyntaxError,
       position,
+      renderedInCount: inCount.get(id) ?? 0,
+      renderedOutCount: outCount.get(id) ?? 0,
     });
   });
 
-  const edgeById = new Map<string, Edge>();
-  for (const e of [...depSide.edges, ...depentSide.edges]) edgeById.set(e.id, e);
-
   return {
     nodes,
-    edges: Array.from(edgeById.values()),
+    edges,
     meta: {
       requestedDepth: depth,
       effectiveDepth,

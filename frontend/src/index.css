@@ -2517,6 +2517,15 @@ code, pre, kbd {
   opacity: 0.85;
 }
 
+/* Below ~35% zoom a node's text label renders too small to actually read
+   (React Flow scales the whole viewport, so it's real shrunk text, not an
+   illusion) — hide it instead of rendering decorative noise. Icons/colors
+   stay, since those remain meaningful at any zoom level. */
+.react-flow.zoom-labels-hidden .graph-node-label,
+.react-flow.zoom-labels-hidden .graph-node-health {
+  visibility: hidden;
+}
+
 /* The centered/focused file in the neighborhood gets a distinct glow ring
    so "this is the file I'm looking at" never requires reading a label. */
 .graph-node.is-center {

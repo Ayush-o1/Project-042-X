@@ -19,7 +19,7 @@ import { FileNode } from './FileNode';
 import { CustomEdge } from './CustomEdge';
 import { getFolderPath, importanceTier } from './layoutUtils';
 import { healthToColor } from '../../lib/health';
-import type { FocusedLayoutMeta } from './layoutUtils';
+import type { FocusedLayoutMeta, LayoutOrientation } from './layoutUtils';
 import { ModuleTreemap } from './ModuleTreemap';
 import type { TreemapColorMode } from './ModuleTreemap';
 import { ArchitectureToolbar } from './ArchitectureToolbar';
@@ -59,9 +59,10 @@ const FocusCanvas: React.FC<{
   filters: GraphFilters;
   canvasSelection: string | null;
   multiSelection: Set<string>;
+  orientation: LayoutOrientation;
   onOpenInspector: (id: string, multi: boolean) => void;
   onRecenter: (id: string) => void;
-}> = ({ centerIds, filters, canvasSelection, multiSelection, onOpenInspector, onRecenter }) => {
+}> = ({ centerIds, filters, canvasSelection, multiSelection, orientation, onOpenInspector, onRecenter }) => {
   const { dependencies, insights } = useRepositoryStore(
     useShallow(s => ({ dependencies: s.dependencies, insights: s.insights })),
   );
@@ -91,6 +92,21 @@ const FocusCanvas: React.FC<{
   const [isTakingLong, setIsTakingLong] = useState(false);
   const [override, setOverride] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
+  // At low zoom, a node's label renders at a couple of physical pixels —
+  // decorative noise, not legible text (React Flow scales the whole
+  // viewport via CSS transform, so real text does shrink with it). Hiding
+  // labels below a threshold declutters a zoomed-out dense neighborhood
+  // without losing any actual legibility. Tracked via onMoveEnd (fires
+  // once per gesture) rather than the continuous onMove, so this never
+  // recomputes mid-pan/zoom.
+  const [labelsHidden, setLabelsHidden] = useState(false);
+  const ZOOM_LABEL_THRESHOLD = 0.35;
+  const handleMoveEnd = useCallback((_e: unknown, viewport: { zoom: number }) => {
+    setLabelsHidden(prev => {
+      const next = viewport.zoom < ZOOM_LABEL_THRESHOLD;
+      return prev === next ? prev : next;
+    });
+  }, []);
 
   // ── Depth-limited layout, off the main thread ──────────────────────────
   const workerRef = useRef<Worker | null>(null);
@@ -122,7 +138,7 @@ const FocusCanvas: React.FC<{
       return;
     }
 
-    const cacheKey = `${centerKey}|${architectureDepth}|${override ? 1 : 0}`;
+    const cacheKey = `${centerKey}|${architectureDepth}|${override ? 1 : 0}|${orientation}`;
     const cached = cacheRef.current.get(cacheKey);
     if (cached) {
       // Touch for LRU: move to the most-recently-used end.
@@ -171,6 +187,7 @@ const FocusCanvas: React.FC<{
             label: n.label, type: n.type, path: n.path,
             isCenter: n.isCenter, inDegree: n.inDegree, outDegree: n.outDegree,
             importance: importanceTier(n.inDegree), hasSyntaxError: n.hasSyntaxError,
+            renderedInCount: n.renderedInCount, renderedOutCount: n.renderedOutCount, orientation,
           },
         };
       });
@@ -220,7 +237,7 @@ const FocusCanvas: React.FC<{
     );
 
     worker.postMessage({
-      requestId, data: dependencies, centerIds, depth: architectureDepth, override,
+      requestId, data: dependencies, centerIds, depth: architectureDepth, override, orientation,
     } satisfies DagreLayoutRequest);
 
     return () => {
@@ -228,7 +245,7 @@ const FocusCanvas: React.FC<{
       worker.removeEventListener('error', handleError);
       clearTimer();
     };
-  }, [dependencies, centerKey, architectureDepth, override, retryToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dependencies, centerKey, architectureDepth, override, retryToken, orientation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => { workerRef.current?.terminate(); workerRef.current = null; }, []);
 
@@ -302,7 +319,10 @@ const FocusCanvas: React.FC<{
       });
 
     setNodes(processed);
-    setEdges(rawResult.edges.map(e => ({ ...e, data: { ...e.data, pulse: pulsingIds.has(e.id) } })));
+    // `!== false` (not a plain truthy check): `showEdges` is a new field —
+    // a filters object persisted before it existed reads back as
+    // `undefined`, which must still mean "show edges", not "hide them".
+    setEdges(filters.showEdges !== false ? rawResult.edges.map(e => ({ ...e, data: { ...e.data, pulse: pulsingIds.has(e.id) } })) : []);
   }, [rawResult, insights, filters, cycleIds, hotspotIds, orphanSet, setNodes, setEdges, pulsingIds]);
 
   // ── Hover/pin highlight (transitive dependency closure), scoped to the
@@ -429,6 +449,8 @@ const FocusCanvas: React.FC<{
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeMouseEnter={(_, node) => setHoveredNode(node.id)}
         onNodeMouseLeave={() => setHoveredNode(null)}
+        onMoveEnd={handleMoveEnd}
+        className={labelsHidden ? 'zoom-labels-hidden' : undefined}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
@@ -505,9 +527,10 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
 
   const isCompact = useMediaQuery(`(max-width: ${BREAKPOINTS.tabletLandscape - 1}px)`);
   const [filters, setFilters] = usePersistedState<GraphFilters>('graphFilters', {
-    showOrphans: true, showCycles: false, highlightHotspots: false, highlightCycles: true, fileTypeFilter: '',
+    showOrphans: true, showCycles: false, highlightHotspots: false, highlightCycles: true, fileTypeFilter: '', showEdges: true,
   });
   const [treemapColorMode, setTreemapColorMode] = usePersistedState<TreemapColorMode>('architectureTreemapColorMode', 'health');
+  const [orientation, setOrientation] = usePersistedState<LayoutOrientation>('architectureOrientation', 'LR');
   const [canvasSelection, setCanvasSelection] = useState<string | null>(null);
   const [multiSelection, setMultiSelection] = useState<Set<string>>(new Set());
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -807,6 +830,8 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
           filters={filters}
           onFiltersChange={setFilters}
           fileTypes={fileTypes}
+          orientation={orientation}
+          onOrientationChange={setOrientation}
         />
         {centerIds.length > 0 && (() => {
           const isFileFocus = !!architectureFocusId && !architectureFocusId.startsWith(FOLDER_PREFIX);
@@ -864,6 +889,7 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
               filters={filters}
               canvasSelection={canvasSelection}
               multiSelection={multiSelection}
+              orientation={orientation}
               onOpenInspector={handleNodeSelect}
               onRecenter={handleFocusFile}
             />

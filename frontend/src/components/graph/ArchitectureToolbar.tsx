@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { rankByFuzzyMatch, FILENAME_MATCH_BONUS } from '../../lib/fuzzyMatch';
 import {
   Search, FileCode, AlertTriangle, Filter, ChevronDown,
-  Flame, EyeOff, CircleDot, Info, FileWarning, Keyboard,
+  Flame, EyeOff, CircleDot, Info, FileWarning, Keyboard, Waypoints,
+  StretchHorizontal, StretchVertical,
 } from 'lucide-react';
 import type { DependencyGraphData } from '../../types';
 import { healthToColor } from '../../lib/health';
@@ -14,6 +15,10 @@ export interface GraphFilters {
   highlightHotspots: boolean;
   highlightCycles: boolean;
   fileTypeFilter: string; // '' = all, '.ts', '.js', etc.
+  /** Hides edges entirely (nodes still render) — useful to declutter a
+   *  dense hub neighborhood down to just "what files are here" before
+   *  re-enabling connections. */
+  showEdges: boolean;
 }
 
 const DEPTH_OPTIONS: { value: 1 | 2 | 3 | 'all'; label: string; key: string }[] = [
@@ -87,6 +92,8 @@ export const ArchitectureToolbar = ({
   filters,
   onFiltersChange,
   fileTypes,
+  orientation,
+  onOrientationChange,
 }: {
   files: DependencyGraphData['nodes'];
   onSearch: (id: string) => void;
@@ -95,6 +102,8 @@ export const ArchitectureToolbar = ({
   filters: GraphFilters;
   onFiltersChange: (f: GraphFilters) => void;
   fileTypes: string[];
+  orientation: 'LR' | 'TB';
+  onOrientationChange: (o: 'LR' | 'TB') => void;
 }) => {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
@@ -216,6 +225,19 @@ export const ArchitectureToolbar = ({
 
       <div className="divider-v-sm" />
 
+      <button
+        type="button"
+        onClick={() => onOrientationChange(orientation === 'LR' ? 'TB' : 'LR')}
+        title={orientation === 'LR' ? 'Layout: left-to-right — click for top-to-bottom' : 'Layout: top-to-bottom — click for left-to-right'}
+        aria-label="Toggle layout orientation"
+        className="btn-icon btn-icon-md"
+        style={{ color: 'var(--text-tertiary)' }}
+      >
+        {orientation === 'LR' ? <StretchHorizontal size={15} /> : <StretchVertical size={15} />}
+      </button>
+
+      <div className="divider-v-sm" />
+
       <div style={{ position: 'relative' }}>
         <button
           ref={filterBtnRef}
@@ -235,12 +257,18 @@ export const ArchitectureToolbar = ({
             <span className="field-label">Filters</span>
 
             {([
+              { key: 'showEdges',         label: 'Show Edges',             icon: <Waypoints size={12} /> },
               { key: 'showOrphans',       label: 'Show Orphan Files',      icon: <EyeOff size={12} /> },
               { key: 'showCycles',        label: 'Show Cycle Files Only',  icon: <CircleDot size={12} /> },
               { key: 'highlightHotspots', label: 'Highlight Hotspots',     icon: <Flame size={12} /> },
               { key: 'highlightCycles',   label: 'Highlight Cycles',       icon: <AlertTriangle size={12} /> },
             ] as { key: keyof GraphFilters; label: string; icon: React.ReactNode }[]).map(({ key, label, icon }) => {
-              const val = filters[key] as boolean;
+              // `showEdges` defaults to "on" even when absent from an
+              // older persisted filters object (see DependencyGraphView's
+              // matching `!== false` guard) — read it the same way here so
+              // the toggle's displayed state never disagrees with what's
+              // actually rendered.
+              const val = key === 'showEdges' ? filters.showEdges !== false : (filters[key] as boolean);
               return (
                 <label
                   key={key}

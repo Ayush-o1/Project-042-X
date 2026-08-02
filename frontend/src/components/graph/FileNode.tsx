@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import type { CSSProperties } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { FileCode2, FileJson, Image as ImageIcon, File, Flame, AlertTriangle, FileWarning, CheckSquare } from 'lucide-react';
 import { healthToColor } from '../../lib/health';
@@ -26,6 +27,17 @@ interface FileNodeData {
   /** In the shift/ctrl-click comparison set — independent of `selected`
    *  (single, RF-native) and `isCenter` (the recentered focus target). */
   multiSelected?: boolean;
+  /** How many edges are actually rendered into/out of this node in the
+   *  current canvas — drives how many Handles are rendered per side so
+   *  connections fan out across the node instead of all converging on one
+   *  fixed point (the previous behavior for any node with more than a
+   *  couple of visible connections, most visible on hub files). Undefined
+   *  or <=1 falls back to the original single centered handle. */
+  renderedInCount?: number;
+  renderedOutCount?: number;
+  /** Matches the layout's dagre rankdir — flips which side dependents vs.
+   *  dependencies attach to (Left/Right for 'LR', Top/Bottom for 'TB'). */
+  orientation?: 'LR' | 'TB';
 }
 
 const IMPORTANCE_STYLES: Record<ImportanceTier, { fontSize: string; fontWeight: string; borderWidth: number }> = {
@@ -43,6 +55,15 @@ const LANG_BADGE: Record<string, { icon: React.ReactNode; color: string }> = {
 export const FileNode = memo(({ data, selected }: { data: FileNodeData; selected?: boolean }) => {
   const tier = data.importance ?? 'medium';
   const { fontSize, fontWeight, borderWidth } = IMPORTANCE_STYLES[tier];
+  const isTB = data.orientation === 'TB';
+  const targetPosition = isTB ? Position.Top : Position.Left;
+  const sourcePosition = isTB ? Position.Bottom : Position.Right;
+  const targetCount = Math.max(1, data.renderedInCount ?? 1);
+  const sourceCount = Math.max(1, data.renderedOutCount ?? 1);
+  const handleOffsetStyle = (i: number, count: number): CSSProperties => {
+    const pct = `${((i + 1) / (count + 1)) * 100}%`;
+    return isTB ? { left: pct } : { top: pct };
+  };
   const ext = data.label?.substring(data.label.lastIndexOf('.'));
   const langBadge = ['.png', '.jpg', '.svg'].includes(ext ?? '')
     ? { icon: <ImageIcon size={10} />, color: 'var(--lang-image)' }
@@ -102,17 +123,25 @@ export const FileNode = memo(({ data, selected }: { data: FileNodeData; selected
           <CheckSquare size={14} fill="var(--accent)" color="var(--bg-surface)" />
         </span>
       )}
-      <Handle type="target" position={Position.Left} style={{ background: 'var(--accent)', border: 'none', width: 6, height: 6 }} />
+      {Array.from({ length: targetCount }, (_, i) => (
+        <Handle
+          key={`target-${i}`}
+          id={`target-${i}`}
+          type="target"
+          position={targetPosition}
+          style={{ background: 'var(--accent)', border: 'none', width: 6, height: 6, ...handleOffsetStyle(i, targetCount) }}
+        />
+      ))}
 
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize, fontWeight, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span className="graph-node-label" style={{ fontSize, fontWeight, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {data?.label || 'Unknown'}
         </span>
         {data.healthScore !== undefined && tier !== 'small' && (
           // Health was previously carried only by the left border's color —
           // a real number here gives it a non-color signal too, and answers
           // "how much" rather than just "worse/better".
-          <span style={{ fontSize: 'var(--text-2xs)', color: healthColor, opacity: 0.85 }}>
+          <span className="graph-node-health" style={{ fontSize: 'var(--text-2xs)', color: healthColor, opacity: 0.85 }}>
             health {data.healthScore}
           </span>
         )}
@@ -142,7 +171,15 @@ export const FileNode = memo(({ data, selected }: { data: FileNodeData; selected
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} style={{ background: 'var(--accent)', border: 'none', width: 6, height: 6 }} />
+      {Array.from({ length: sourceCount }, (_, i) => (
+        <Handle
+          key={`source-${i}`}
+          id={`source-${i}`}
+          type="source"
+          position={sourcePosition}
+          style={{ background: 'var(--accent)', border: 'none', width: 6, height: 6, ...handleOffsetStyle(i, sourceCount) }}
+        />
+      ))}
     </div>
   );
 });

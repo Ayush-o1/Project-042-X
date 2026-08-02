@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { getFocusedLayout } from './layoutUtils';
-import type { FocusedLayoutResult } from './layoutUtils';
+import type { FocusedLayoutResult, LayoutOrientation } from './layoutUtils';
 import type { DependencyGraphData } from '../../types';
 
 // dagre's layout pass is pure computation (no DOM access), so it's a good
@@ -22,6 +22,9 @@ export interface DagreLayoutRequest {
    *  depth, however expensive — set when the user explicitly dismisses a
    *  "neighborhood too large" reduction notice. */
   override?: boolean;
+  /** 'LR' (default) or 'TB' — dagre's own rankdir, exposed as a toolbar
+   *  toggle rather than a second layout algorithm. */
+  orientation?: LayoutOrientation;
 }
 
 export interface DagreLayoutResponse {
@@ -32,8 +35,8 @@ export interface DagreLayoutResponse {
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = (e: MessageEvent<DagreLayoutRequest>) => {
-  const { requestId, data, centerIds, depth, override } = e.data;
-  const result = getFocusedLayout(data, centerIds, depth, { override });
+  const { requestId, data, centerIds, depth, override, orientation } = e.data;
+  const result = getFocusedLayout(data, centerIds, depth, { override, orientation });
   const response: DagreLayoutResponse = { requestId, result };
   ctx.postMessage(response);
 };
