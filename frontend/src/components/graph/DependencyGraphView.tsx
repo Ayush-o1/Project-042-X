@@ -3,6 +3,8 @@ import {
   ReactFlow,
   ReactFlowProvider,
   Background,
+  MiniMap,
+  Controls,
   useNodesState,
   useEdgesState,
 } from '@xyflow/react';
@@ -16,13 +18,14 @@ import type { DagreLayoutRequest, DagreLayoutResponse } from './dagreLayout.work
 import { FileNode } from './FileNode';
 import { CustomEdge } from './CustomEdge';
 import { getFolderPath, importanceTier } from './layoutUtils';
+import { healthToColor } from '../../lib/health';
 import type { FocusedLayoutMeta } from './layoutUtils';
 import { ModuleTreemap } from './ModuleTreemap';
 import type { TreemapColorMode } from './ModuleTreemap';
 import { ArchitectureToolbar } from './ArchitectureToolbar';
 import type { GraphFilters } from './ArchitectureToolbar';
 import { NodeInspector } from './NodeInspector';
-import { Network, Loader2, ShieldAlert, Compass, AlertCircle } from 'lucide-react';
+import { Network, Loader2, ShieldAlert, Compass, AlertCircle, ArrowLeft } from 'lucide-react';
 import type { GraphNode } from '../../types';
 
 const nodeTypes = { fileNode: FileNode };
@@ -38,6 +41,14 @@ const PULSE_DURATION_MS = 420;
 // while the line leading to it goes bright.
 const EDGE_COLOR = { default: 'var(--border-focus)', outgoing: 'var(--accent)', incoming: 'var(--color-success)' };
 const edgeMarker = (color: string) => ({ type: 'arrowclosed' as const, width: 14, height: 14, color });
+
+// Mirrors FileNode's own left-border color logic so the minimap reads as
+// the same encoding as the canvas, not a second color scheme to learn.
+const minimapNodeColor = (node: Node): string => {
+  const data = node.data as { isCenter?: boolean; healthScore?: number };
+  if (data.isCenter) return 'var(--accent)';
+  return data.healthScore !== undefined ? healthToColor(data.healthScore) : 'var(--border-default)';
+};
 
 /** The focus canvas — a depth-limited neighborhood laid out by the dagre
  *  worker, plus keyboard traversal and the hover/pin dependency highlight.
@@ -409,6 +420,17 @@ const FocusCanvas: React.FC<{
         proOptions={{ hideAttribution: false }}
       >
         <Background color="rgba(255,255,255,0.04)" gap={20} size={1} />
+        <Controls showInteractive={false} position="bottom-left" />
+        <MiniMap
+          nodeColor={minimapNodeColor}
+          nodeStrokeWidth={0}
+          maskColor="rgba(0,0,0,0.55)"
+          pannable
+          zoomable
+          position="bottom-right"
+          style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)' }}
+          ariaLabel="Neighborhood minimap"
+        />
       </ReactFlow>
     </>
   );
@@ -496,6 +518,43 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
     if (architectureFocusId.startsWith(FOLDER_PREFIX)) return architectureFocusId.slice(FOLDER_PREFIX.length);
     return getFolderPath(nodeById.get(architectureFocusId)?.path ?? '');
   }, [architectureFocusId, nodeById]);
+
+  // ── Back navigation ─────────────────────────────────────────────────
+  // A plain stack of previously-focused ids. Every real focus change (not
+  // a back-navigation itself, guarded by `isNavigatingBackRef`) pushes the
+  // *previous* focus onto it, so "back" always returns to exactly where
+  // you came from — reusing the LRU layout cache (see FocusCanvas) means
+  // the revisited neighborhood renders instantly.
+  const focusHistoryRef = useRef<(string | null)[]>([]);
+  const prevFocusIdRef = useRef<string | null>(architectureFocusId);
+  const isNavigatingBackRef = useRef(false);
+  const [canGoBack, setCanGoBack] = useState(false);
+
+  useEffect(() => {
+    if (isNavigatingBackRef.current) {
+      isNavigatingBackRef.current = false;
+    } else if (prevFocusIdRef.current !== architectureFocusId) {
+      focusHistoryRef.current.push(prevFocusIdRef.current);
+      setCanGoBack(true);
+    }
+    prevFocusIdRef.current = architectureFocusId;
+  }, [architectureFocusId]);
+
+  const handleBack = useCallback(() => {
+    if (focusHistoryRef.current.length === 0) return;
+    const prev = focusHistoryRef.current.pop()!;
+    isNavigatingBackRef.current = true;
+    setArchitectureFocusId(prev);
+    setCanGoBack(focusHistoryRef.current.length > 0);
+  }, [setArchitectureFocusId]);
+
+  // Breadcrumb: the focused folder path (or a file's containing folder),
+  // segmented for display — purely informational until Phase 6 gives the
+  // treemap real parent/child nesting for segments to jump between.
+  const breadcrumbSegments = useMemo(() => {
+    if (!focusedFolder) return [];
+    return focusedFolder.split('/').filter(Boolean);
+  }, [focusedFolder]);
 
   // Global adjacency (full graph, not depth-limited) — what the Inspector's
   // "Imported By"/"Imports" lists and search/keyboard traversal need.
@@ -677,6 +736,39 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
           onFiltersChange={setFilters}
           fileTypes={fileTypes}
         />
+        {centerIds.length > 0 && (() => {
+          const isFileFocus = !!architectureFocusId && !architectureFocusId.startsWith(FOLDER_PREFIX);
+          const fileName = isFileFocus
+            ? (nodeById.get(architectureFocusId!)?.name ?? architectureFocusId!.split('/').pop())
+            : null;
+          const allSegments = fileName ? [...breadcrumbSegments, fileName] : breadcrumbSegments;
+          return (
+            <div className="architecture-breadcrumb-bar">
+              <button
+                type="button"
+                onClick={handleBack}
+                disabled={!canGoBack}
+                className="btn-icon btn-icon-sm"
+                aria-label="Back to previous focus"
+                title="Back to previous focus"
+              >
+                <ArrowLeft size={13} />
+              </button>
+              {allSegments.length > 0 && (
+                <div className="architecture-breadcrumb-path" aria-label="Current focus path">
+                  {allSegments.map((seg, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 && <span className="architecture-breadcrumb-sep">/</span>}
+                      <span className={`architecture-breadcrumb-segment${i === allSegments.length - 1 ? ' current' : ''}`}>
+                        {seg}
+                      </span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         <div
           ref={canvasWrapperRef}
           className="architecture-canvas-panel"

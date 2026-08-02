@@ -404,9 +404,14 @@ code, pre, kbd {
     transform var(--duration-fast) var(--ease-default);
   flex-shrink: 0;
 }
-.btn-icon:hover {
+.btn-icon:hover:not(:disabled) {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+.btn-icon:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: transparent;
 }
 .btn-icon:active {
   transform: scale(0.92);
@@ -2294,6 +2299,33 @@ code, pre, kbd {
   background: var(--bg-surface);
   color: var(--accent);
   box-shadow: var(--shadow-sm);
+}
+
+.architecture-breadcrumb-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.architecture-breadcrumb-path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-2xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+.architecture-breadcrumb-segment.current {
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+.architecture-breadcrumb-sep {
+  opacity: 0.4;
 }
 
 .architecture-canvas-panel {
