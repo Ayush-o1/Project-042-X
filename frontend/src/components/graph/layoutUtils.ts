@@ -1,7 +1,21 @@
+// Must run before `dagre` is imported — see dagreCjsShim.ts for why (dagre
+// and graphlib's own internal modules throw `ReferenceError: window is not
+// defined` inside a Web Worker without it).
+import './dagreCjsShim';
 import dagre from 'dagre';
-import { MarkerType } from '@xyflow/react';
 import type { Edge } from '@xyflow/react';
 import type { DependencyGraphData } from '../../types';
+
+// This module is imported by dagreLayout.worker.ts, which runs inside a Web
+// Worker (no `window`/DOM). `@xyflow/react` is a React/DOM UI library —
+// importing even a single trivial enum value from it (as this file used to,
+// for `MarkerType`) risks pulling its whole module graph into the worker's
+// bundle depending on bundler tree-shaking. Only `import type` (fully erased
+// at compile time) is safe to use from `@xyflow/react` here; any runtime
+// value import is not, regardless of how small it looks. This local constant
+// is `MarkerType.ArrowClosed`'s actual runtime value (a plain string),
+// copied instead of imported so no bundler behavior is load-bearing.
+const ARROW_CLOSED_MARKER = 'arrowclosed';
 
 /**
  * Files with at least this many importers are treated as structurally
@@ -75,7 +89,7 @@ function layoutSide(
       seenEdgeIds.add(id);
       edges.push({
         id, source: e.sourceId, target: e.targetId, type: 'custom', data: { count: 1 },
-        markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: 'var(--border-focus)' },
+        markerEnd: { type: ARROW_CLOSED_MARKER, width: 14, height: 14, color: 'var(--border-focus)' },
       });
     }
 
