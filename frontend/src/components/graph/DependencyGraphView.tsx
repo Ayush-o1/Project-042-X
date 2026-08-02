@@ -30,6 +30,15 @@ const edgeTypes = { custom: CustomEdge };
 const FOLDER_PREFIX = 'folder:';
 const PULSE_DURATION_MS = 420;
 
+// Mirrors CustomEdge's own stroke-color logic. The arrowhead marker is a
+// separate SVG element resolved from `edge.markerEnd` (see @xyflow/react's
+// MarkerDefinitions) — CustomEdge can recolor the stroke it draws, but not
+// this marker, so it has to be kept in sync here whenever edge highlight
+// state changes, or the one place the eye lands stays a dim default color
+// while the line leading to it goes bright.
+const EDGE_COLOR = { default: 'var(--border-focus)', outgoing: 'var(--accent)', incoming: 'var(--color-success)' };
+const edgeMarker = (color: string) => ({ type: 'arrowclosed' as const, width: 14, height: 14, color });
+
 /** The focus canvas — a depth-limited neighborhood laid out by the dagre
  *  worker, plus keyboard traversal and the hover/pin dependency highlight.
  *  Rendered only once something is focused; the default (nothing focused)
@@ -149,7 +158,7 @@ const FocusCanvas: React.FC<{
           data: {
             label: n.label, type: n.type, path: n.path,
             isCenter: n.isCenter, inDegree: n.inDegree, outDegree: n.outDegree,
-            importance: importanceTier(n.inDegree),
+            importance: importanceTier(n.inDegree), hasSyntaxError: n.hasSyntaxError,
           },
         };
       });
@@ -294,7 +303,7 @@ const FocusCanvas: React.FC<{
       setEdges(eds => eds.map(e => {
         const d = e.data as { isIncoming?: boolean; isOutgoing?: boolean; isDimmed?: boolean } | undefined;
         if (!d?.isIncoming && !d?.isOutgoing && !d?.isDimmed) return e;
-        return { ...e, data: { ...e.data, isIncoming: false, isOutgoing: false, isDimmed: false } };
+        return { ...e, data: { ...e.data, isIncoming: false, isOutgoing: false, isDimmed: false }, markerEnd: edgeMarker(EDGE_COLOR.default) };
       }));
       return;
     }
@@ -326,7 +335,8 @@ const FocusCanvas: React.FC<{
       const isDimmed = !isIncoming && !isOutgoing;
       const d = e.data as { isIncoming?: boolean; isOutgoing?: boolean; isDimmed?: boolean } | undefined;
       if (d?.isIncoming === isIncoming && d?.isOutgoing === isOutgoing && d?.isDimmed === isDimmed) return e;
-      return { ...e, data: { ...e.data, isIncoming, isOutgoing, isDimmed } };
+      const color = isOutgoing ? EDGE_COLOR.outgoing : isIncoming ? EDGE_COLOR.incoming : EDGE_COLOR.default;
+      return { ...e, data: { ...e.data, isIncoming, isOutgoing, isDimmed }, markerEnd: edgeMarker(color) };
     }));
   }, [highlightAnchor, canvasAdjacency, setNodes, setEdges]);
 

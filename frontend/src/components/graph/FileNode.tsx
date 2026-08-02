@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { FileCode2, FileJson, Image as ImageIcon, File, Flame, AlertTriangle } from 'lucide-react';
+import { FileCode2, FileJson, Image as ImageIcon, File, Flame, AlertTriangle, FileWarning } from 'lucide-react';
 import { healthToColor } from '../../lib/health';
 import type { ImportanceTier } from './layoutUtils';
 
@@ -20,6 +20,9 @@ interface FileNodeData {
    *  HIGH/MEDIUM_IMPORTANCE_IN_DEGREE. Drives the node's visual weight so a
    *  heavily-imported file reads as more important at a glance. */
   importance?: ImportanceTier;
+  /** True when the backend's AST parse failed on this file — surfaced so a
+   *  file the graph couldn't fully analyze doesn't look like any other. */
+  hasSyntaxError?: boolean;
 }
 
 const IMPORTANCE_STYLES: Record<ImportanceTier, { fontSize: string; fontWeight: string; borderWidth: number }> = {
@@ -86,14 +89,27 @@ export const FileNode = memo(({ data, selected }: { data: FileNodeData; selected
         <span style={{ fontSize, fontWeight, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {data?.label || 'Unknown'}
         </span>
+        {data.healthScore !== undefined && tier !== 'small' && (
+          // Health was previously carried only by the left border's color —
+          // a real number here gives it a non-color signal too, and answers
+          // "how much" rather than just "worse/better".
+          <span style={{ fontSize: 'var(--text-2xs)', color: healthColor, opacity: 0.85 }}>
+            health {data.healthScore}
+          </span>
+        )}
       </div>
 
       <span className="graph-node-lang-badge" style={{ color: langBadge.color }} title={data.type}>
         {langBadge.icon}
       </span>
 
-      {(data.isCycle || data.isHotspot) && (
+      {(data.isCycle || data.isHotspot || data.hasSyntaxError) && (
         <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+          {data.hasSyntaxError && (
+            <span title="Failed to parse — this file's imports/exports may be incomplete">
+              <FileWarning size={11} color="var(--color-danger)" />
+            </span>
+          )}
           {data.isCycle && (
             <span title="In circular dependency">
               <AlertTriangle size={11} color="var(--color-danger)" />

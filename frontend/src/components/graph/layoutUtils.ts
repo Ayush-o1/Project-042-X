@@ -88,7 +88,8 @@ function layoutSide(
     if (!seenEdgeIds.has(id)) {
       seenEdgeIds.add(id);
       edges.push({
-        id, source: e.sourceId, target: e.targetId, type: 'custom', data: { count: 1 },
+        id, source: e.sourceId, target: e.targetId, type: 'custom',
+        data: { count: 1, isDynamic: e.isDynamic, isTypeOnly: e.isTypeOnly },
         markerEnd: { type: ARROW_CLOSED_MARKER, width: 14, height: 14, color: 'var(--border-focus)' },
       });
     }
@@ -161,6 +162,7 @@ export interface FocusedLayoutNode {
   isCenter: boolean;
   inDegree: number;
   outDegree: number;
+  hasSyntaxError?: boolean;
   position: { x: number; y: number };
 }
 
@@ -372,6 +374,7 @@ export function getFocusedLayout(
       isCenter: centerIds.includes(id),
       inDegree: inDegreeByFile.get(id) ?? 0,
       outDegree: outDegreeByFile.get(id) ?? 0,
+      hasSyntaxError: raw.hasSyntaxError,
       position,
     });
   });

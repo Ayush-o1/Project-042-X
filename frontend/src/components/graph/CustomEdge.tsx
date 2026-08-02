@@ -29,16 +29,25 @@ export const CustomEdge = memo(({
   // the new center — the one deliberate moment motion is used to draw the
   // eye along the dependency chain. Everything else is static at rest.
   const isPulsing = data?.pulse;
+  // `isDynamic` (import()) and `isTypeOnly` (import type) were computed by
+  // the backend's AST parse but never reached the canvas before — dashed
+  // strokes distinguish both from an ordinary static value import without
+  // needing a second color channel.
+  const isDynamic = data?.isDynamic;
+  const isTypeOnly = data?.isTypeOnly;
 
   let strokeColor = 'var(--border-focus)';
   let strokeWidth = 1.5;
 
+  // Widened from the original 1.5 -> 2 (a 0.5px difference reads as
+  // negligible at normal zoom) to 1.5 -> 2.5, so a highlighted chain is
+  // unmistakable rather than a subtle nudge.
   if (isOutgoing) {
     strokeColor = 'var(--accent)';
-    strokeWidth = 2;
+    strokeWidth = 2.5;
   } else if (isIncoming) {
     strokeColor = 'var(--color-success)';
-    strokeWidth = 2;
+    strokeWidth = 2.5;
   }
 
   if (isDimmed) {
@@ -50,6 +59,7 @@ export const CustomEdge = memo(({
     ...style,
     stroke: strokeColor,
     strokeWidth,
+    strokeDasharray: isDynamic ? '2 4' : isTypeOnly ? '8 4' : undefined,
     opacity: isDimmed ? 0.1 : 1,
     transition: 'stroke 200ms ease, stroke-width 200ms ease, opacity 300ms ease',
   };
