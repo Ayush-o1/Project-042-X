@@ -429,9 +429,21 @@ const FocusCanvas: React.FC<{
         <div className="architecture-canvas-notice" role="status">
           <ShieldAlert size={14} />
           <span>
-            {layoutMeta.truncated
-              ? `This neighborhood is too dense to lay out in full (${layoutMeta.edgeCount.toLocaleString()}+ edges) — showing the most important files.`
-              : `Depth ${layoutMeta.requestedDepth} would be too dense (${layoutMeta.edgeCount.toLocaleString()} edges) — showing depth ${layoutMeta.effectiveDepth} instead.`}
+            {(() => {
+              // Folder-focus makes *every file in the folder* a simultaneous
+              // BFS center — structurally far more expensive than a single
+              // file at the same depth, so a user landing here from a large
+              // folder deserves to know that's why, not just "depth".
+              const isFolderFocus = centerIds.length > 1;
+              if (layoutMeta.truncated) {
+                return isFolderFocus
+                  ? `This folder's combined neighborhood (${centerIds.length} files) is too dense to lay out in full (${layoutMeta.edgeCount.toLocaleString()}+ edges) — showing the most important files.`
+                  : `This neighborhood is too dense to lay out in full (${layoutMeta.edgeCount.toLocaleString()}+ edges) — showing the most important files.`;
+              }
+              return isFolderFocus
+                ? `This folder's combined neighborhood (${centerIds.length} files) would be too dense at depth ${layoutMeta.requestedDepth} (${layoutMeta.edgeCount.toLocaleString()} edges) — showing depth ${layoutMeta.effectiveDepth} instead.`
+                : `Depth ${layoutMeta.requestedDepth} would be too dense (${layoutMeta.edgeCount.toLocaleString()} edges) — showing depth ${layoutMeta.effectiveDepth} instead.`;
+            })()}
           </span>
           {!override && (
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOverride(true)}>
@@ -483,12 +495,14 @@ const FocusCanvas: React.FC<{
  *  "where should I start?" without requiring any interaction first. */
 const FocusPrompt: React.FC<{
   shortcuts: { path: string; healthScore: number }[];
+  importantShortcuts: { path: string; fanIn: number }[];
+  totalFileCount: number;
   onSelect: (path: string) => void;
-}> = ({ shortcuts, onSelect }) => (
+}> = ({ shortcuts, importantShortcuts, totalFileCount, onSelect }) => (
   <div className="architecture-canvas-status architecture-focus-prompt">
     <Compass size={22} style={{ opacity: 0.35 }} />
     <p className="architecture-prompt-title">Select a file or folder to explore its dependencies.</p>
-    {shortcuts.length > 0 && (
+    {shortcuts.length > 0 ? (
       <div className="architecture-prompt-shortcuts">
         <span className="field-label" style={{ marginBottom: 'var(--space-1)' }}>
           <ShieldAlert size={10} /> Highest-risk files
@@ -502,6 +516,26 @@ const FocusPrompt: React.FC<{
           </button>
         ))}
       </div>
+    ) : importantShortcuts.length > 0 ? (
+      // No sickestModules doesn't mean nothing to click — a small/healthy
+      // repo still has real structural entry points worth starting from.
+      <div className="architecture-prompt-shortcuts">
+        <span className="field-label" style={{ marginBottom: 'var(--space-1)' }}>
+          <Compass size={10} /> Start here — most-connected files
+        </span>
+        {importantShortcuts.map(s => (
+          <button key={s.path} type="button" className="architecture-prompt-shortcut" onClick={() => onSelect(s.path)}>
+            <span className="architecture-prompt-shortcut-name">{s.path.split('/').pop()}</span>
+            <span className="architecture-prompt-shortcut-health" style={{ color: 'var(--text-tertiary)' }}>
+              {s.fanIn} import{s.fanIn === 1 ? '' : 's'}
+            </span>
+          </button>
+        ))}
+      </div>
+    ) : totalFileCount > 0 && (
+      <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+        {totalFileCount} file{totalFileCount === 1 ? '' : 's'} in this repository — pick one from the sidebar or search above.
+      </p>
     )}
   </div>
 );
@@ -653,6 +687,20 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
     () => (insights?.sickestModules ?? []).slice(0, 3).map(m => ({ path: m.id, healthScore: m.healthScore })),
     [insights],
   );
+
+  // A small/healthy repo can easily have zero sickestModules — the prompt
+  // shouldn't degrade to just an icon and a sentence with nothing to click.
+  // Fall back to the most-connected files (real structural signal, already
+  // available via globalAdjacency) so there's always a concrete "start
+  // here" even when there's nothing to flag as risky.
+  const importantShortcuts = useMemo(() => {
+    if (!dependencies || riskShortcuts.length > 0) return [];
+    return dependencies.nodes
+      .map(n => ({ path: n.id, fanIn: globalAdjacency.reverse.get(n.id)?.length ?? 0 }))
+      .filter(s => s.fanIn > 0)
+      .sort((a, b) => b.fanIn - a.fanIn)
+      .slice(0, 3);
+  }, [dependencies, riskShortcuts, globalAdjacency]);
 
   // Reset the keyboard selection cursor whenever the rendered neighborhood
   // changes shape, defaulting to the (first) center node.
@@ -882,7 +930,12 @@ const FlowWrapper: React.FC<{ externalHighlight?: string | null; isActive: boole
           onKeyDown={handleCanvasKeyDown}
         >
           {centerIds.length === 0 ? (
-            <FocusPrompt shortcuts={riskShortcuts} onSelect={handleSelectAndOpen} />
+            <FocusPrompt
+              shortcuts={riskShortcuts}
+              importantShortcuts={importantShortcuts}
+              totalFileCount={dependencies.nodes.length}
+              onSelect={handleSelectAndOpen}
+            />
           ) : (
             <FocusCanvas
               centerIds={centerIds}

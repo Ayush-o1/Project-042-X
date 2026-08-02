@@ -274,7 +274,19 @@ export const ModuleTreemap = ({
         {cells.length === 0 && (
           <div className="treemap-empty">No folders to show.</div>
         )}
-        {cells.map(({ node, cell }, i) => {
+        {/* A single dead-end leaf (no further subfolders) would otherwise
+            fill the entire panel with one giant, information-free colored
+            rectangle — proportional sizing has nothing to be proportional
+            *to* with just one item. A compact card reads better than a
+            wall of one color for what is, structurally, a tiny repo. */}
+        {cells.length === 1 && cells[0].node.children.size === 0 ? (
+          <div className="treemap-empty" style={{ flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <span>{cells[0].node.segment} — {cells[0].cell.fileCount} file{cells[0].cell.fileCount === 1 ? '' : 's'}</span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => onSelectFolder(cells[0].cell.path)}>
+              Explore in graph
+            </button>
+          </div>
+        ) : cells.map(({ node, cell }, i) => {
           const rect = rects[i];
           if (!rect || rect.width < 1 || rect.height < 1) return null;
           const hasChildren = node.children.size > 0;
