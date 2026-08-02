@@ -61,12 +61,13 @@ const LoadingView: React.FC<{ message?: string }> = ({ message = 'Loading…' })
 /* ── AppShell ───────────────────────────────────────────────── */
 export const AppShell: React.FC = () => {
   const {
-    isAnalyzing, error, metadata, activeTab, setActiveTab,
+    isAnalyzing, error, clearError, metadata, activeTab, setActiveTab,
     setCommandPaletteOpen, graphHighlightNode, hasCycles,
   } = useRepositoryStore(
     useShallow(s => ({
       isAnalyzing: s.isAnalyzing,
       error: s.error,
+      clearError: s.clearError,
       metadata: s.metadata,
       activeTab: s.activeTab,
       setActiveTab: s.setActiveTab,
@@ -329,6 +330,9 @@ export const AppShell: React.FC = () => {
                       {error}
                     </p>
                   </div>
+                  <button type="button" onClick={clearError} className="btn btn-secondary btn-sm">
+                    Try Again
+                  </button>
                 </div>
               </div>
             )}

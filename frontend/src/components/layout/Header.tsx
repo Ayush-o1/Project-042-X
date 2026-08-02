@@ -205,49 +205,19 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
         )}
       </div>
 
-      {/* ── Center: Path Input ── */}
-      <div className="app-header-search" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)', maxWidth: 560 }}>
-        <form onSubmit={handleSubmit} style={{ flex: 1, position: 'relative' }}>
-          <Search
-            size={14}
-            style={{
-              position: 'absolute',
-              left: 12,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: inputFocused ? 'var(--accent-hover)' : 'var(--text-tertiary)',
-              transition: 'color var(--duration-fast)',
-              pointerEvents: 'none',
-            }}
-          />
-          <input
-            ref={inputRef}
-            id="repo-path-input"
-            type="text"
-            placeholder={PUBLIC_DEMO_MODE ? 'Paste a public GitHub repo URL…' : 'Absolute path, or a GitHub repo URL…'}
-            value={pathInput}
-            onChange={e => setPathInput(e.target.value)}
-            disabled={isAnalyzing}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            aria-label="Repository path"
-            style={{
-              width: '100%',
-              padding: '6px 14px 6px 34px',
-              backgroundColor: 'var(--bg-surface)',
-              border: `1px solid ${inputFocused ? 'var(--border-focus)' : 'var(--border-default)'}`,
-              borderRadius: 'var(--radius-lg)',
-              color: 'var(--text-primary)',
-              fontSize: 'var(--text-sm)',
-              fontFamily: 'var(--font-mono)',
-              transition: 'border-color var(--duration-fast), box-shadow var(--duration-fast)',
-              boxShadow: inputFocused ? 'var(--shadow-focus)' : 'none',
-              opacity: isAnalyzing ? 0.5 : 1,
-            }}
-          />
-        </form>
-
-        {isAnalyzing && (
+      {/* ── Center: Path Input ──
+          Only ever rendered once there's something to search or switch
+          from/to — the very first thing a visitor sees is the hero input
+          in EmptyHero, not an empty bar floating up here. Mid-analysis,
+          this becomes a status readout (editing a path that's disabled
+          anyway isn't useful); once a repo is loaded, it's repurposed as
+          a quick-switch to open a different repository. */}
+      {isAnalyzing && (
+        <div className="app-header-search" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)', maxWidth: 560 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
+            <Loader2 size={13} className="animate-spin" style={{ color: 'var(--accent)' }} />
+            Analyzing repository…
+          </span>
           <button
             type="button"
             onClick={cancelAnalysis}
@@ -257,8 +227,50 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
             <XCircle size={13} />
             Cancel
           </button>
-        )}
-      </div>
+        </div>
+      )}
+
+      {!isAnalyzing && metadata && (
+        <div className="app-header-search" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)', maxWidth: 560 }}>
+          <form onSubmit={handleSubmit} style={{ flex: 1, position: 'relative' }}>
+            <Search
+              size={14}
+              style={{
+                position: 'absolute',
+                left: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: inputFocused ? 'var(--accent-hover)' : 'var(--text-tertiary)',
+                transition: 'color var(--duration-fast)',
+                pointerEvents: 'none',
+              }}
+            />
+            <input
+              ref={inputRef}
+              id="repo-switch-input"
+              type="text"
+              placeholder={PUBLIC_DEMO_MODE ? 'Switch to another public GitHub repo…' : 'Switch to another repository…'}
+              value={pathInput}
+              onChange={e => setPathInput(e.target.value)}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              aria-label="Switch repository"
+              style={{
+                width: '100%',
+                padding: '6px 14px 6px 34px',
+                backgroundColor: 'var(--bg-surface)',
+                border: `1px solid ${inputFocused ? 'var(--border-focus)' : 'var(--border-default)'}`,
+                borderRadius: 'var(--radius-lg)',
+                color: 'var(--text-primary)',
+                fontSize: 'var(--text-sm)',
+                fontFamily: 'var(--font-mono)',
+                transition: 'border-color var(--duration-fast), box-shadow var(--duration-fast)',
+                boxShadow: inputFocused ? 'var(--shadow-focus)' : 'none',
+              }}
+            />
+          </form>
+        </div>
+      )}
 
       {/* ── Right: Action Buttons ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>

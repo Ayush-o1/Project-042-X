@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.3] - 2026-08-02
+
+### Changed
+- **Onboarding redesigned around one primary action**: the repository path input is now the hero itself — a large, centered control on the landing page — instead of a button that pointed a first-time visitor's attention up at an always-visible header bar. The header's search bar no longer renders at all until there's something to do with it: hidden entirely before a repository is analyzed, replaced with a non-editable "Analyzing repository…" status during analysis, and only reappearing afterward, repurposed as a quick-switch to open a different repository (distinct placeholder copy, distinct element id, so it reads as a different control with a different job). The landing page's 6-item feature grid — marketing copy competing with the one thing a visitor needs to find — was replaced with a single quiet capability line at the very bottom of the page, well below the fold of the input.
+- Added example-input chips (a local path and a GitHub URL, or two GitHub URLs under `PUBLIC_DEMO_MODE`) that fill the hero input on click, and drag-and-drop onto it: dropping a link (e.g. from a GitHub tab) fills the complete URL; dropping a local folder fills its name with the cursor parked at the start, since the browser's File/DataTransfer APIs never expose an absolute filesystem path — a platform security boundary, not a gap in this integration — surfaced to the user via an inline toast rather than silently only-half-working.
+- The "Analysis Failed" screen now has a **Try Again** button (backed by a new `clearError` store action) that returns to the onboarding hero instead of being a dead end — previously the only way back after a failed analysis was a full page reload, since the header's input (the only other path input in the app) is now intentionally hidden in that state too.
+
 ## [1.6.2] - 2026-08-02
 
 ### Fixed

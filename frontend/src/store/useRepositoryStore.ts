@@ -103,6 +103,10 @@ interface RepositoryState {
   // Actions
   analyze: (path: string) => Promise<void>;
   cancelAnalysis: () => void;
+  /** Dismisses a failed analysis's error, returning to the empty-hero
+   *  onboarding state so the user can try a different path without a
+   *  full page reload. */
+  clearError: () => void;
   setActiveFile: (file: FileModel) => Promise<void>;
   closeFile: (path: string) => void;
   setActiveTab: (tab: ActiveTab) => void;
@@ -262,6 +266,10 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
         set({ isAnalyzing: false, abortController: null, isFetchingFiles: false, isFetchingDependencies: false, isFetchingGit: false });
       }
     }
+  },
+
+  clearError: () => {
+    set({ error: null });
   },
 
   setActiveFile: async (file: FileModel) => {
