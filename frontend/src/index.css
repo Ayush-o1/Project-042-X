@@ -76,6 +76,9 @@
   --text-xl:  18px;
   --text-2xl: 22px;
   --text-3xl: 28px;
+  --text-4xl: 36px;
+  --text-5xl: 48px;
+  --text-display: 72px;
 
   --weight-normal:   400;
   --weight-medium:   500;
@@ -182,17 +185,30 @@ body {
   line-height: var(--leading-normal);
   color: var(--text-primary);
   background-color: var(--bg-app);
-  height: 100vh;
-  overflow: hidden;
+  /* Landing page scrolls; AppShell is fixed-height.
+     .app-mode is toggled by App.tsx when the shell is active. */
+  overflow: auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: 'cv01', 'cv02', 'cv03', 'cv04';
 }
 
+body.app-mode {
+  overflow: hidden;
+  height: 100vh;
+}
+
 #root {
-  height: 100%;
+  height: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* App mode: root must fill the viewport exactly so AppShell's
+   gridTemplateRows layout works correctly. */
+body.app-mode #root {
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* ────────────────────────────────────────────────────────────

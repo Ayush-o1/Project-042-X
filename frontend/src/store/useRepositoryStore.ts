@@ -100,9 +100,19 @@ interface RepositoryState {
   gitGroupByDay: boolean;
   gitCollapsedDays: Set<string>;
 
+  // Landing page
+  /** True while the marketing landing page is shown. Transitions to false
+   *  when the user clicks "Analyze Repository" on the landing page, or when
+   *  a session is restored — revealing the app shell. */
+  showLanding: boolean;
+
   // Actions
   analyze: (path: string) => Promise<void>;
   cancelAnalysis: () => void;
+  /** Hides the landing page and shows the app shell. Call this from the
+   *  landing page's primary CTA, passing an optional initial path to begin
+   *  analysis immediately. */
+  enterApp: (initialPath?: string) => void;
   /** Dismisses a failed analysis's error, returning to the empty-hero
    *  onboarding state so the user can try a different path without a
    *  full page reload. */
@@ -168,6 +178,8 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
   gitGroupByDay: false,
   gitCollapsedDays: new Set(),
 
+  showLanding: true,
+
   cancelAnalysis: () => {
     const { abortController } = get();
     if (abortController) {
@@ -207,6 +219,7 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       analysisProgress: 100,
       activeTab: 'insights',
       isSessionHistoryOpen: false,
+      showLanding: false, // always go straight to the app when restoring a session
       // Graph view state is repo-specific — a loaded session is a different
       // dataset than whatever was on screen before, same as a fresh analyze().
       architectureFocusId: null,
@@ -265,6 +278,13 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
       if (get().abortController === controller) {
         set({ isAnalyzing: false, abortController: null, isFetchingFiles: false, isFetchingDependencies: false, isFetchingGit: false });
       }
+    }
+  },
+
+  enterApp: (initialPath?: string) => {
+    set({ showLanding: false });
+    if (initialPath) {
+      void get().analyze(initialPath);
     }
   },
 
