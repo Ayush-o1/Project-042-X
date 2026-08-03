@@ -1707,6 +1707,12 @@ code, pre, kbd {
    the grid row in AppShell.tsx and the sidebar-overlay/backdrop top offset
    (both read the same variable) grow to match, instead of clipping the
    now-taller header. */
+/* Header home button focus ring */
+.header-home-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @media (max-width: 767px) {
   .header-wordmark {
     display: none;
@@ -2742,6 +2748,30 @@ code, pre, kbd {
   padding-top: var(--space-8);
 }
 
+/* Subtle text-link back to the marketing landing page */
+.empty-hero-back-home {
+  display: block;
+  margin: var(--space-4) auto 0;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: color var(--duration-fast), background var(--duration-fast);
+  letter-spacing: 0.01em;
+}
+.empty-hero-back-home:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+.empty-hero-back-home:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @media (max-width: 1023px) {
   .empty-hero { padding: var(--space-16) var(--space-8) var(--space-10); }
 }
@@ -2758,3 +2788,4 @@ code, pre, kbd {
   .empty-hero { padding: var(--space-8) var(--space-4) var(--space-6); }
   .empty-hero-badge { width: 52px; height: 52px; }
 }
+

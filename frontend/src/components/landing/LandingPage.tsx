@@ -20,6 +20,9 @@ import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
 import './LandingPage.css';
 
+/** Single source of truth for the project's GitHub URL. */
+const GITHUB_REPO = 'https://github.com/Ayush-o1/Project-042-X';
+
 /* ── Intersection observer hook for scroll reveals ────────── */
 function useReveal(threshold = 0.15) {
   const ref = useRef<HTMLElement | null>(null);
@@ -317,7 +320,7 @@ export const LandingPage: React.FC = () => {
           {/* Actions */}
           <div className="landing-nav-actions">
             <a
-              href="https://github.com/ayushpai/project-042-x"
+              href={GITHUB_REPO}
               target="_blank"
               rel="noopener noreferrer"
               className="landing-nav-link"
@@ -377,7 +380,7 @@ export const LandingPage: React.FC = () => {
             </button>
             <a
               id="hero-cta-secondary"
-              href="https://github.com/ayushpai/project-042-x"
+              href={GITHUB_REPO}
               target="_blank"
               rel="noopener noreferrer"
               className="landing-hero-secondary"
@@ -634,7 +637,7 @@ export const LandingPage: React.FC = () => {
               </button>
               <a
                 id="footer-cta-secondary"
-                href="https://github.com/ayushpai/project-042-x"
+                href={GITHUB_REPO}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="landing-hero-secondary"
@@ -658,7 +661,7 @@ export const LandingPage: React.FC = () => {
 
           <div className="landing-footer-links">
             <a
-              href="https://github.com/ayushpai/project-042-x"
+              href={GITHUB_REPO}
               target="_blank"
               rel="noopener noreferrer"
               className="landing-footer-link"
@@ -667,7 +670,7 @@ export const LandingPage: React.FC = () => {
               GitHub
             </a>
             <a
-              href="https://github.com/ayushpai/project-042-x/blob/main/LICENSE"
+              href={`${GITHUB_REPO}/blob/main/LICENSE`}
               target="_blank"
               rel="noopener noreferrer"
               className="landing-footer-link"

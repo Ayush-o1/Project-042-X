@@ -23,11 +23,12 @@ const EXAMPLE_INPUTS = PUBLIC_DEMO_MODE
  *  under three seconds. Recent sessions and a one-line capability summary
  *  exist underneath it, deliberately quiet, so nothing competes with it. */
 export const EmptyHero: React.FC = () => {
-  const { analyze, loadSessionIntoStore, setSessionHistoryOpen } = useRepositoryStore(
+  const { analyze, loadSessionIntoStore, setSessionHistoryOpen, goHome } = useRepositoryStore(
     useShallow(s => ({
       analyze: s.analyze,
       loadSessionIntoStore: s.loadSessionIntoStore,
       setSessionHistoryOpen: s.setSessionHistoryOpen,
+      goHome: s.goHome,
     })),
   );
   const toast = useToast();
@@ -243,6 +244,15 @@ export const EmptyHero: React.FC = () => {
       <p className="empty-hero-capabilities">
         AST dependency graphs · Git timeline · Insights engine · Code viewer
       </p>
+
+      <button
+        type="button"
+        onClick={goHome}
+        className="empty-hero-back-home"
+        aria-label="Back to home page"
+      >
+        ← Back to home
+      </button>
     </div>
   );
 };

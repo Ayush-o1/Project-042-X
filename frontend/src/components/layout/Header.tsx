@@ -39,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
     analyze, isAnalyzing, metadata,
     cancelAnalysis, analysisProgress,
     setSettingsOpen, setSessionHistoryOpen, setCompareModalOpen,
-    activeTab,
+    activeTab, goHome,
   } = useRepositoryStore(
     useShallow(s => ({
       analyze: s.analyze,
@@ -51,6 +51,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
       setSessionHistoryOpen: s.setSessionHistoryOpen,
       setCompareModalOpen: s.setCompareModalOpen,
       activeTab: s.activeTab,
+      goHome: s.goHome,
     })),
   );
 
@@ -168,31 +169,55 @@ export const Header: React.FC<HeaderProps> = ({ sidebarOpen, onToggleSidebar }) 
         >
           <Menu size={16} />
         </button>
-        <div
+
+        {/* Logo + wordmark — clicking returns to the landing page */}
+        <button
+          type="button"
+          onClick={goHome}
+          className="header-home-btn"
+          title="Back to home"
+          aria-label="Go back to home page"
           style={{
-            width: 30, height: 30,
-            background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
-            borderRadius: 'var(--radius-lg)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff',
-            boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-3)',
+            background: 'none',
+            border: 'none',
+            padding: '4px 6px',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+            transition: 'background var(--duration-fast)',
             flexShrink: 0,
           }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
         >
-          <FolderGit2 size={16} />
-        </div>
-        <span
-          className="header-wordmark"
-          style={{
-            fontWeight: 'var(--weight-semibold)',
-            fontSize: 'var(--text-base)',
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.02em',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          042-X
-        </span>
+          <div
+            style={{
+              width: 30, height: 30,
+              background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
+              borderRadius: 'var(--radius-lg)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#fff',
+              boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)',
+              flexShrink: 0,
+            }}
+          >
+            <FolderGit2 size={16} />
+          </div>
+          <span
+            className="header-wordmark"
+            style={{
+              fontWeight: 'var(--weight-semibold)',
+              fontSize: 'var(--text-base)',
+              color: 'var(--text-primary)',
+              letterSpacing: '-0.02em',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            042-X
+          </span>
+        </button>
 
         {metadata && (
           <span

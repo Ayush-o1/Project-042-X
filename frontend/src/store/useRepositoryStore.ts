@@ -113,6 +113,10 @@ interface RepositoryState {
    *  landing page's primary CTA, passing an optional initial path to begin
    *  analysis immediately. */
   enterApp: (initialPath?: string) => void;
+  /** Returns to the marketing landing page. Cancels any in-flight analysis
+   *  and resets per-repo state so the landing page is shown clean. Does NOT
+   *  wipe saved sessions — IndexedDB is untouched. */
+  goHome: () => void;
   /** Dismisses a failed analysis's error, returning to the empty-hero
    *  onboarding state so the user can try a different path without a
    *  full page reload. */
@@ -288,9 +292,43 @@ export const useRepositoryStore = create<RepositoryState>((set, get) => ({
     }
   },
 
+  goHome: () => {
+    // Abort any in-flight fetch so the backend isn't doing work for nothing.
+    const { abortController } = get();
+    if (abortController) abortController.abort();
+
+    set({
+      showLanding: true,
+      // Clear repo data so the landing page is shown clean
+      isAnalyzing: false,
+      isFetchingFiles: false,
+      isFetchingDependencies: false,
+      isFetchingGit: false,
+      analysisProgress: 0,
+      abortController: null,
+      error: null,
+      fileError: null,
+      analysisId: null,
+      metadata: null,
+      files: [],
+      dependencies: null,
+      git: null,
+      insights: null,
+      activeFile: null,
+      openFiles: [],
+      activeFileContent: null,
+      graphHighlightNode: null,
+      architectureFocusId: null,
+      architectureDepth: 2,
+      gitGroupByDay: false,
+      gitCollapsedDays: new Set(),
+    });
+  },
+
   clearError: () => {
     set({ error: null });
   },
+
 
   setActiveFile: async (file: FileModel) => {
     if (file.isDirectory) return;
