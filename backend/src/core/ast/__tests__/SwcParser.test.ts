@@ -41,6 +41,21 @@ describe('SwcParser', () => {
     expect(deps.imports[0].isDynamic).toBe(true);
   });
 
+  it('should parse CommonJS require() calls', async () => {
+    const code = `
+      const express = require('express');
+      var application = require('./application');
+      const { foo } = require('./foo');
+    `;
+    const deps = await parser.parse('test.js', code);
+
+    expect(deps.imports.length).toBe(3);
+    expect(deps.imports.map(i => i.specifier)).toContain('express');
+    expect(deps.imports.map(i => i.specifier)).toContain('./application');
+    expect(deps.imports.map(i => i.specifier)).toContain('./foo');
+    expect(deps.imports.every(i => i.isDynamic === false)).toBe(true);
+  });
+
   it('should parse barrel exports (re-exports)', async () => {
     const code = `
       export { something } from './module-a';

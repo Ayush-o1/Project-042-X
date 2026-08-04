@@ -88,6 +88,27 @@ export class SwcParser implements IParser {
       }
     }
 
+    // Handle CommonJS: require('y'); const x = require('y');
+    // Still the dominant module format across the public npm/GitHub
+    // ecosystem — without this, analyzing any CommonJS repository (e.g.
+    // Express) resolves zero edges and the dependency graph renders every
+    // file as a disconnected, unlaid-out node.
+    if (
+      node.type === 'CallExpression' &&
+      node.callee?.type === 'Identifier' &&
+      node.callee.value === 'require' &&
+      node.arguments && node.arguments.length > 0
+    ) {
+      const arg = node.arguments[0].expression;
+      if (arg.type === 'StringLiteral') {
+        deps.imports.push({
+          specifier: arg.value,
+          isDynamic: false,
+          isTypeOnly: false,
+        });
+      }
+    }
+
     // Recursively walk children
     for (const key in node) {
       if (Array.isArray(node[key])) {
