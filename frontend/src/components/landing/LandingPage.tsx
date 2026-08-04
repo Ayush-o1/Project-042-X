@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useRepositoryStore } from '../../store/useRepositoryStore';
 import { useShallow } from 'zustand/react/shallow';
+import { PUBLIC_DEMO_MODE } from '../../lib/config';
 import './LandingPage.css';
 
 const GITHUB_REPO = 'https://github.com/Ayush-o1/Project-042-X';
@@ -254,7 +255,12 @@ const BENTO = [
 ] as const;
 
 const HOW_STEPS = [
-  { num: '01', title: 'Point at a repository', desc: 'Paste a local path or a public GitHub URL. No setup, no config, no installation beyond Node.js.' },
+  {
+    num: '01', title: 'Point at a repository',
+    desc: PUBLIC_DEMO_MODE
+      ? 'Paste a public GitHub repository URL. No setup, no config, no installation.'
+      : 'Paste a local path or a public GitHub URL. No setup, no config, no installation beyond Node.js.',
+  },
   { num: '02', title: 'Deep analysis runs', desc: 'Every file is parsed into an AST. Imports and exports are extracted to build the dependency graph. Git history is read in full.' },
   { num: '03', title: 'Explore the architecture', desc: 'Navigate the treemap, focus any file in the dependency canvas, browse commit history, or read the Insights dashboard.' },
   { num: '04', title: 'Understand the codebase', desc: 'Export a PDF or Markdown architecture report. Save the session to IndexedDB and restore it instantly next time.' },
@@ -502,7 +508,10 @@ export const LandingPage: React.FC = () => {
           <div className="lp-cta-box">
             <div className="lp-cta-glow" aria-hidden="true" />
             <h2 className="lp-cta-title">Start understanding<br />your codebase</h2>
-            <p className="lp-cta-sub">Paste a GitHub URL or a local path.<br />No account. No upload. No waiting.</p>
+            <p className="lp-cta-sub">
+              {PUBLIC_DEMO_MODE ? 'Paste a public GitHub repository URL.' : 'Paste a GitHub URL or a local path.'}
+              <br />No account. No upload. No waiting.
+            </p>
             <div className="lp-cta-actions">
               <button id="footer-cta-primary" type="button" className="lp-btn-primary lp-btn-primary--lg" onClick={() => enterApp()} aria-label="Open the repository analyzer">
                 Analyze Repository<ArrowRight size={16} className="lp-btn-arrow" />

@@ -12,5 +12,12 @@ export const API_URL: string =
  * copy that mentions a local filesystem path (which a public backend
  * rejects) doesn't show up in the live demo. Purely cosmetic: the backend
  * is what actually enforces the restriction.
+ *
+ * Defaults to on for production builds (Vercel, `npm run build`) so a
+ * missing VITE_PUBLIC_DEMO_MODE env var can never leak local-path copy
+ * onto the public deployment. Local dev (`npm run dev`) defaults to off.
+ * Either default can be overridden explicitly via the env var.
  */
-export const PUBLIC_DEMO_MODE: boolean = import.meta.env.VITE_PUBLIC_DEMO_MODE === 'true';
+export const PUBLIC_DEMO_MODE: boolean =
+  import.meta.env.VITE_PUBLIC_DEMO_MODE === 'true' ||
+  (import.meta.env.VITE_PUBLIC_DEMO_MODE !== 'false' && import.meta.env.PROD);
