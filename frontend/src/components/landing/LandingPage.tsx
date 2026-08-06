@@ -225,32 +225,32 @@ const BENTO = [
   {
     id: 'graph', icon: <Network size={16} />, title: 'Architecture Graph',
     description: 'Treemap overview and interactive focus canvas. Select any file to explore its full dependency neighborhood at 1–4 hops.',
-    iconColor: '#818cf8', accentBorder: 'rgba(99,102,241,0.15)', visual: <GraphMini />, wide: true,
+    iconColor: '#818cf8', accentBorder: 'rgba(99,102,241,0.18)', glowColor: 'rgba(99,102,241,0.15)', visual: <GraphMini />, wide: true,
   },
   {
     id: 'fast', icon: <Zap size={16} />, title: 'Fast Analysis',
     description: 'SWC (Rust) parses ASTs significantly faster than JS parsers. Graph layout runs in a dedicated Web Worker.',
-    iconColor: '#6366f1', accentBorder: 'rgba(99,102,241,0.1)', visual: <TerminalMini />, wide: false,
+    iconColor: '#6366f1', accentBorder: 'rgba(99,102,241,0.12)', glowColor: 'rgba(99,102,241,0.12)', visual: <TerminalMini />, wide: false,
   },
   {
     id: 'git', icon: <GitBranch size={16} />, title: 'Git Timeline',
     description: 'Virtualized commit list with branch-lane gutter, author filtering, fuzzy search, and an activity histogram.',
-    iconColor: '#34d399', accentBorder: 'rgba(52,211,153,0.12)', visual: <GitMini />, wide: false,
+    iconColor: '#34d399', accentBorder: 'rgba(52,211,153,0.15)', glowColor: 'rgba(52,211,153,0.12)', visual: <GitMini />, wide: false,
   },
   {
     id: 'code', icon: <FileCode size={16} />, title: 'Integrated Code Viewer',
     description: 'Jump from any graph node to syntax-highlighted source. A Related Files panel lists every import and importer.',
-    iconColor: '#38bdf8', accentBorder: 'rgba(56,189,248,0.12)', visual: <CodeMini />, wide: false,
+    iconColor: '#38bdf8', accentBorder: 'rgba(56,189,248,0.15)', glowColor: 'rgba(56,189,248,0.12)', visual: <CodeMini />, wide: false,
   },
   {
     id: 'palette', icon: <Search size={16} />, title: 'Command Palette',
     description: 'Cmd+K fuzzy-matches every file by name or path. Non-contiguous queries work. Recent files appear first.',
-    iconColor: '#a78bfa', accentBorder: 'rgba(167,139,250,0.12)', visual: <PaletteMini />, wide: false,
+    iconColor: '#a78bfa', accentBorder: 'rgba(167,139,250,0.15)', glowColor: 'rgba(167,139,250,0.12)', visual: <PaletteMini />, wide: false,
   },
   {
     id: 'insights', icon: <BarChart2 size={16} />, title: 'Insights Engine',
     description: "Deterministic metrics: Tarjan's SCC cycle detection, orphaned files, longest dependency chains, and per-module health scores.",
-    iconColor: '#fbbf24', accentBorder: 'rgba(251,191,36,0.12)', visual: <InsightsMini />, wide: true,
+    iconColor: '#fbbf24', accentBorder: 'rgba(251,191,36,0.15)', glowColor: 'rgba(251,191,36,0.10)', visual: <InsightsMini />, wide: true,
   },
 ] as const;
 
@@ -422,7 +422,14 @@ export const LandingPage: React.FC = () => {
           </div>
           <div className={`lp-bento lp-stagger${featuresRef.visible ? ' lp-stagger--in' : ''}`}>
             {BENTO.map(card => (
-              <div key={card.id} className={`lp-bento-card${card.wide ? ' lp-bento-card--wide' : ''}`} style={{ '--card-border': card.accentBorder } as React.CSSProperties}>
+              <div
+                key={card.id}
+                className={`lp-bento-card${card.wide ? ' lp-bento-card--wide' : ''}`}
+                style={{
+                  '--card-border': card.accentBorder,
+                  '--card-glow-color': card.glowColor,
+                } as React.CSSProperties}
+              >
                 <div className="lp-bento-card-content">
                   <div className="lp-bento-icon" aria-hidden="true" style={{ color: card.iconColor }}>{card.icon}</div>
                   <h3 className="lp-bento-title">{card.title}</h3>
